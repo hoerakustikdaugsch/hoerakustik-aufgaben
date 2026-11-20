@@ -247,7 +247,7 @@ function customerView(){
    <div class="cgrid">${DIMS.map((d,i)=>`<div class="cbox"><span>${d}</span><small>Ihr Bedarf</small>${dots(rec.n[i],"#B8452F")}<small>${st.name}</small>${dots(st.p[i])}</div>`).join("")}</div>`
  :`<div class="cstages">${STAGES.map((s,i)=>{const f=stageFrom(s.id);return `<div class="cstage${s.id===st.id?" on":""}"><span class="pnum">${i+1}</span><b>${s.name}</b><small>${esc(s.sub)}</small>
    <div class="mini">${DIMS.map((d,j)=>`<div><span>${d}</span>${dots(s.p[j])}</div>`).join("")}</div><span class="pfrom">${s.id==="basis"?"Kassenleistung":"ab "+eur(S.kunde.kasse==="gkv"?f.gkv:f.vk)}</span><small>${S.kunde.kasse==="gkv"&&s.id!=="basis"?"Eigenanteil je Seite":"je Seite"}</small></div>`}).join("")}</div>`;
- return `<div class="cust"><header><div class="brand"><img src="icons/emblem.png" alt="">HÖRAKUSTIK DAUGSCH</div><span class="muted">Ihre persönliche Hörberatung · ${esc(name())}</span>${KUNDE?"":`<button class="btn" data-custclose>Zurück zur Beratung</button>`}</header>
+ return `<div class="cust"><header><img class="clogo" src="img/logo.png" alt="Hörakustik Daugsch"><span class="muted">Ihre persönliche Hörberatung · ${esc(name())}</span>${KUNDE?"":`<button class="btn" data-custclose>Zurück zur Beratung</button>`}</header>
   <nav class="ctabs">${tabs.map((t,i)=>`<button data-ctab="${i}" aria-pressed="${i===custTab}">${t}</button>`).join("")}</nav><main>${body}</main>
   <footer class="muted">Hörakustik Daugsch · Ludwig-Schwamb-Straße 19 · 67574 Osthofen · 06242 50 69 744</footer></div>`;
 }
@@ -375,7 +375,7 @@ function brochureHtml(){
  const goals=S.ziele.filter(z=>z.t).sort((a,b)=>a.p-b.p);
  const wishes=[...S.wuensche,S.bauform&&S.bauform!=="noch offen"?"Bauform: "+S.bauform:"",S.energie&&S.energie!=="egal"?"Energie: "+S.energie:""].filter(Boolean);
  const dR=degree(pta("R")),dL=degree(pta("L"));
- const foot=(n)=>`<footer><span>${FIRMA.name} · ${FIRMA.claim}</span><span>${n}</span></footer>`;
+ const foot=(n)=>`<footer><img src="img/logo.png" alt="Hörakustik Daugsch"><span>${FIRMA.claim}</span><span>${n}</span></footer>`;
  const reasons=DIMS.map((d,i)=>{const ex=SITS.filter(s=>s.dim===i&&S.sit[s.id]&&S.sit[s.id].d>=2).map(s=>s.t);return ex.length?`<li><b>${dimTxt[i]}</b> – zum Beispiel ${esc(ex.slice(0,3).join(", "))} – brauchen Sie ${needTxt[rec.n[i]-1]}. ${st.name} bietet hier ${needTxt[st.p[i]-1]}.</li>`:""}).filter(Boolean);
  const priceBlock=q?`<table class="price">${q.lines.map(l=>`<tr><td>${esc(l[0])}</td><td>${eur(l[1])}</td></tr>`).join("")}<tr class="tot"><td>${gkv?"Ihr voraussichtlicher Eigenanteil":"Voraussichtlicher Gesamtpreis"}</td><td>${eur(q.total)}</td></tr></table>`
   :`<table class="price"><tr><td>${count} × Hörsystem der Stufe ${st.name}${gkv?" (Eigenanteil)":""}, ab</td><td>${eur((gkv?stageFrom(st.id).gkv:stageFrom(st.id).vk)*count)}</td></tr></table>`;
@@ -389,7 +389,7 @@ html,body{margin:0;background:#cfd8d4;font-family:Asap,system-ui,sans-serif;colo
 .bar button{font:inherit;font-weight:700;border:0;border-radius:99px;padding:10px 18px;background:#fff;color:#1B493B;cursor:pointer}.bar button.s{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5)}
 .page{width:210mm;height:297mm;margin:10mm auto;background:#fff;position:relative;overflow:hidden;page-break-after:always;break-after:page;box-shadow:0 10px 30px rgba(0,0,0,.18)}
 .in{padding:18mm 18mm 24mm;height:100%;display:flex;flex-direction:column;gap:5mm}
-footer{position:absolute;left:18mm;right:18mm;bottom:10mm;display:flex;justify-content:space-between;font-size:8.5pt;color:#7A918A;border-top:.3mm solid #DCE6E2;padding-top:3mm}
+footer{position:absolute;left:18mm;right:18mm;bottom:9mm;display:flex;justify-content:space-between;align-items:center;font-size:8.5pt;color:#7A918A;border-top:.3mm solid #DCE6E2;padding-top:3mm}
 .kick{font-size:9pt;letter-spacing:.14em;text-transform:uppercase;color:#5A8278;font-weight:600}
 h1{font-size:30pt;line-height:1.05;margin:0;font-weight:700}
 h2{font-size:22pt;line-height:1.1;margin:0;font-weight:700}
@@ -397,12 +397,10 @@ h3{font-size:12.5pt;margin:0 0 2mm;font-weight:700}
 p{margin:0;font-size:11pt;line-height:1.55}
 .lead{font-size:12.5pt;line-height:1.55;color:#3C5A50}
 /* Titel */
-.cover .ph{position:absolute;inset:0 0 auto 0;height:62%;background:url(img/empfang.jpg) center 40%/cover}
-.cover .ph::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(27,73,59,0) 55%,rgba(27,73,59,.55))}
-.cover .band{position:absolute;left:0;right:0;bottom:0;height:38%;background:#1B493B;color:#fff;padding:16mm 18mm;display:flex;flex-direction:column;gap:5mm}
-.cover .band::before{content:"";position:absolute;left:0;right:0;top:-14mm;height:15mm;background:#1B493B;clip-path:path('M0 30 C 160 0 360 54 560 26 S 800 6 800 6 V60 H0Z');clip-path:polygon(0 70%,12% 45%,26% 38%,40% 48%,54% 62%,68% 58%,82% 40%,92% 30%,100% 34%,100% 100%,0 100%)}
-.cover .brand{display:flex;align-items:center;gap:4mm;font-weight:700;letter-spacing:.12em;font-size:11pt}
-.cover .brand img{width:13mm;height:13mm}
+.cover .ph{position:absolute;inset:0;background:#1B493B url(img/empfang.jpg) center top/auto 72% no-repeat}
+.cover .ph::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,#1B493B 0%,#1B493B 36%,rgba(27,73,59,.9) 41%,rgba(27,73,59,.6) 48%,rgba(27,73,59,.28) 56%,rgba(27,73,59,.08) 63%,rgba(27,73,59,0) 70%)}
+.cover .band{position:absolute;left:0;right:0;bottom:0;height:40%;background:transparent;color:#fff;padding:16mm 18mm;display:flex;flex-direction:column;gap:5mm}
+.cover .logo{width:66mm;display:block;margin-bottom:4mm}.cover .bandlogo{display:none}
 .cover h1{font-size:34pt}
 .cover .who{font-size:15pt;color:#B7C6C2}
 .cover .meta{margin-top:auto;display:flex;justify-content:space-between;font-size:10pt;color:#B7C6C2}
@@ -466,17 +464,18 @@ p{margin:0;font-size:11pt;line-height:1.55}
 .steps li::before{content:"";position:absolute;left:5.6mm;top:10mm;bottom:0;width:.6mm;background:#B7C6C2}.steps li:last-child::before{display:none}
 .steps i{font-style:normal;width:12mm;height:12mm;border-radius:50%;background:#276955;color:#fff;display:grid;place-items:center;font-weight:700;font-size:12pt}
 .steps b{display:block;font-size:12pt;margin-top:1mm}.steps p{font-size:10.5pt;color:#3C5A50}
-.contact{margin-top:auto;background:#1B493B;color:#fff;border-radius:6mm;padding:8mm;display:grid;grid-template-columns:1.2fr 1fr;gap:8mm}
-.contact b{font-size:13pt}.contact p{color:#D5E0DC;font-size:10.5pt}.contact .brand{display:flex;align-items:center;gap:3mm;font-weight:700;letter-spacing:.1em;font-size:10pt;margin-bottom:3mm}.contact .brand img{width:10mm;height:10mm}
-.contact table{font-size:10pt;color:#D5E0DC;border-collapse:collapse}.contact td{padding:.8mm 4mm .8mm 0;vertical-align:top}
+.contact{margin-top:auto;background:#1B493B;color:#fff;border-radius:6mm;padding:8mm;display:grid;grid-template-columns:1fr 1.15fr;gap:8mm}
+.contact b{font-size:13pt}.contact p{color:#D5E0DC;font-size:10.5pt}.contact .clogo{width:52mm;display:block;margin-bottom:5mm}
+.contact table{font-size:10pt;color:#D5E0DC;border-collapse:collapse}.contact td:last-child{white-space:nowrap}.contact td{padding:.8mm 4mm .8mm 0;vertical-align:top}
 .notes{border:.3mm solid #DCE6E2;border-radius:5mm;padding:5mm 6mm;display:flex;flex-direction:column;gap:7mm}.notes b{font-size:11pt}.notes span{display:block;border-bottom:.3mm solid #DCE6E2;height:0}
 .wish{display:grid;grid-template-columns:1fr 1fr;gap:4mm}.wish div{background:#EEF3F1;border-radius:5mm;padding:5mm}.wish small{display:block;font-size:9pt;color:#587168;margin-bottom:1mm}.wish b{font-size:12pt}
+footer img{height:7mm}
 @media print{html,body{background:#fff}.bar{display:none}.page{margin:0;box-shadow:none}}
 </style></head><body>
 <div class="bar"><span>Broschüre für ${esc(nm)}</span><button onclick="window.print()">Drucken / als PDF speichern</button><button class="s" onclick="window.close()">Schließen</button></div>
 
 <section class="page cover"><div class="ph"></div><div class="band">
- <div class="brand"><img src="icons/emblem.png" alt="">HÖRAKUSTIK DAUGSCH</div>
+ <img class="logo" src="img/logo-weiss.png" alt="Hörakustik Daugsch">
  <h1>Ihre persönliche<br>Hörberatung</h1><div class="who">für ${esc(nm)}</div>
  <div class="meta"><span>${date}</span><span class="claim">${FIRMA.claim}</span></div></div></section>
 
@@ -545,7 +544,7 @@ p{margin:0;font-size:11pt;line-height:1.55}
  <span class="kick">08 · Ihre nächsten Schritte</span><h2>So geht es weiter</h2>
  <ol class="steps">${NEXT.map(([t,d],i)=>`<li><i>${i+1}</i><div><b>${t}</b><p>${d}</p></div></li>`).join("")}</ol>
  <div class="notes"><b>Ihre Notizen</b><span></span><span></span><span></span><span></span></div>
- <div class="contact"><div><div class="brand"><img src="icons/emblem.png" alt="">HÖRAKUSTIK DAUGSCH</div><b>${FIRMA.person}</b><p>${FIRMA.rolle}</p><p style="margin-top:3mm">${FIRMA.str}<br>${FIRMA.ort}</p></div>
+ <div class="contact"><div><img class="clogo" src="img/logo-weiss.png" alt="Hörakustik Daugsch"><b>${FIRMA.person}</b><p>${FIRMA.rolle}</p><p style="margin-top:3mm">${FIRMA.str}<br>${FIRMA.ort}</p></div>
   <div><table><tr><td>Telefon</td><td>${FIRMA.tel}</td></tr><tr><td>E-Mail</td><td>${FIRMA.mail}</td></tr><tr><td>Web</td><td>${FIRMA.web}</td></tr></table>
   <p style="margin:4mm 0 1mm;color:#fff;font-weight:700">Öffnungszeiten</p><table>${FIRMA.zeiten.map(z=>`<tr><td>${z[0]}</td><td>${z[1]}</td></tr>`).join("")}</table></div></div>
  ${foot(9)}</div></section>
@@ -604,7 +603,7 @@ window.addEventListener("beforeunload",()=>{if(dirty)saveNow()});
 function renderKunde(){document.getElementById("kroot").innerHTML=`<div class="bx">${customerView()}</div>`}
 if(KUNDE){
  document.title="Hörakustik Daugsch · Ihre Hörberatung";
- document.body.innerHTML='<div id="kroot"><div class="bx"><div class="cust"><header><div class="brand"><img src="icons/emblem.png" alt="">HÖRAKUSTIK DAUGSCH</div></header><main><div class="crec"><div><h2>Herzlich willkommen</h2><p class="muted">natürlich · individuell · hören</p></div></div></main></div></div></div>';
+ document.body.innerHTML='<div id="kroot"><div class="bx"><div class="cust"><header><img class="clogo" src="img/logo.png" alt="Hörakustik Daugsch"></header><main><div class="crec"><div><h2>Herzlich willkommen</h2><p class="muted">natürlich · individuell · hören</p></div></div></main></div></div></div>';
  if(bc)bc.onmessage=ev=>{const m=ev.data;if(m&&m.type==="state"){S=m.S;custTab=m.custTab;SNAP_PRICES=m.prices;S.override=m.stage===recommend().idx?"":m.stage;renderKunde()}};
 }
 
