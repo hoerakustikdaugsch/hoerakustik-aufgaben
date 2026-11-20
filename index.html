@@ -187,6 +187,43 @@ footer button{background:none;border:0;color:var(--forest);font-weight:600;font-
  .mobnav button[aria-current=page]{color:#fff;background:rgba(255,255,255,.14)}
  .mobnav .plus{width:50px;height:50px;min-width:0;border-radius:16px;background:#fff;color:var(--deep);justify-content:center}
 }
+/* Preise */
+.pstages{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.pstage{background:var(--card);border:2px solid transparent;border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:2px;text-align:left}
+.pstage.on{border-color:var(--forest)}
+.pstage .pnum{width:28px;height:28px;border-radius:50%;background:var(--deep);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;margin-bottom:6px}
+.pstage b{font-size:17px}.pstage small{font-size:12px;color:var(--muted);line-height:1.3}
+.pstage .pfrom{font-size:18px;font-weight:700;color:var(--forest);margin-top:8px}
+.pstage .pcount{margin-top:8px;font-size:12px;font-weight:600;color:var(--sage)}
+.prow{background:var(--card);border-radius:18px;padding:14px 18px;display:flex;align-items:center;gap:16px;cursor:pointer;border:2px solid transparent}
+.prow:hover{border-color:var(--pale)}.prow.off{opacity:.6}
+.prow .body{flex:1;display:flex;flex-direction:column;gap:3px}.prow .title{font-weight:600}
+.pprice{display:flex;flex-direction:column;align-items:flex-end;min-width:96px;white-space:nowrap}
+.pprice b{font-size:16px}.pprice small{font-size:12px;color:var(--muted)}
+.pprice.ek b{font-size:14px;color:var(--muted);font-weight:600}
+.pcalc select{background:#fff}
+.plbl{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--pale)}
+.pseg{display:flex;gap:4px;background:rgba(255,255,255,.08);border-radius:12px;padding:4px}
+.pseg button{flex:1;border:0;background:none;color:var(--pale);border-radius:9px;min-height:36px;font-size:13px;font-weight:600}
+.pseg button[aria-pressed=true]{background:#fff;color:var(--deep)}
+.plines{display:flex;flex-direction:column;gap:6px;background:rgba(255,255,255,.06);border-radius:14px;padding:12px 14px}
+.plines div{display:flex;justify-content:space-between;gap:12px;font-size:14px}.plines b{white-space:nowrap}
+.plines .ptotal{border-top:1px solid rgba(255,255,255,.2);padding-top:8px;margin-top:4px;font-size:16px}
+.plines .ptotal b{font-size:22px}
+.pcard{background:var(--card);border-radius:20px;padding:16px}
+.scroll{overflow-x:auto}
+.ptable{width:100%;border-collapse:collapse;font-size:14px;min-width:720px}
+.ptable th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+.ptable td{padding:6px 8px;border-bottom:1px solid var(--soft)}
+.ptable input,.ptable select{min-height:38px;padding:6px 10px;font-size:15px}
+.ptable td.num{text-align:right;font-weight:600;white-space:nowrap}
+.ppreview{background:var(--soft);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;font-size:14px}
+.pcheck{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:500;color:var(--ink)}
+.pcheck input{width:22px;height:22px;min-height:0}
+code{background:var(--soft);padding:1px 6px;border-radius:6px}
+@media(max-width:1100px){.pstages{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.pstages{grid-template-columns:repeat(2,minmax(0,1fr))}.pstage small{display:none}.pstage .pfrom{font-size:16px}
+ .prow{flex-wrap:wrap;gap:8px 14px}.prow .body{flex-basis:100%}.pprice{align-items:flex-start;min-width:0}}
 .task .mside{display:none}
 </style>
 </head>
@@ -228,7 +265,7 @@ footer button{background:none;border:0;color:var(--forest);font-weight:600;font-
    <button data-go="start">Start</button>
    <button data-go="aufgaben">Aufgaben</button>
    <button disabled>Beratung <span class="soon">bald</span></button>
-   <button disabled>Preise <span class="soon">bald</span></button>
+   <button data-go="preise">Preise</button>
    <button disabled>Kalender <span class="soon">bald</span></button>
   </nav>
   <div class="topright">
@@ -248,7 +285,7 @@ footer button{background:none;border:0;color:var(--forest);font-weight:600;font-
   <button data-go="start"><svg class="i" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Start</button>
   <button data-go="aufgaben"><svg class="i" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>Aufgaben</button>
   <button class="plus" id="fab" aria-label="Neue Aufgabe"><svg class="i" viewBox="0 0 24 24" style="width:26px;height:26px"><path d="M12 5v14M5 12h14"/></svg></button>
-  <button data-go="erledigt"><svg class="i" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Erledigt</button>
+  <button data-go="preise"><svg class="i" viewBox="0 0 24 24"><path d="M17 6.5A6.5 6.5 0 1 0 17 17.5M4 10h9M4 14h9"/></svg>Preise</button>
   <button id="mobTeam"><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.6.8 2.6 2.6 3 5.2"/></svg>Team</button>
  </nav>
 </div>
@@ -287,5 +324,6 @@ footer button{background:none;border:0;color:var(--forest);font-weight:600;font-
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
+<script src="preise.js"></script>
 </body>
 </html>
