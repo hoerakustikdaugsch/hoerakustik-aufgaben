@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aufgaben · Hörakustik Daugsch</title>
+<meta name="theme-color" content="#1B493B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Aufgaben">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Asap:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+/* VOICE: ruhig, präzise, vertrauensvoll – ein Werkzeug für den Ladenalltag
+   IDEA: die Wellen aus dem Emblem als Kopfzeile, darunter die Tagesliste wie ein Auftragsbuch
+   PICTURE: die Tagesübersicht selbst, gleich unter der Kopfzeile
+   COLOUR and TYPE: Markengrün #1B493B dominant, #5A8278/#B7C6C2 Begleitung, Koralle nur für Dringendes; Asap
+   LAYOUT: eine Spalte bis 860px, Filterleiste darüber, auf dem Handy ein schwebender Plus-Knopf */
+:root{color-scheme:light dark;
+--deep:#1B493B;--forest:#276955;--sage:#5A8278;--mist:#8BAAA2;--pale:#B7C6C2;
+--bg:light-dark(#ffffff,#0e1d18);--card:light-dark(#ffffff,#152b24);--soft:light-dark(#eef3f1,#1b352d);
+--ink:light-dark(#14332a,#e6efec);--muted:light-dark(#587168,#9fb6ae);--line:light-dark(#d6e1dd,#2a463d);
+--hot:light-dark(#b8452f,#ff8a70);--hotbg:light-dark(#fbeae6,#3a211b);--accent:light-dark(#276955,#8fc2b2)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Asap,system-ui,sans-serif;overflow-x:clip}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--mist);outline-offset:2px}
+.wrap{max-width:860px;margin:0 auto;padding:0 max(4vw,16px)}
+header{background:var(--deep);color:#fff;position:relative;padding:22px 0 64px}
+header .wrap{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:14px;align-items:center}
+.brand img{width:52px;height:52px;flex:none}
+.brand b{display:block;font-weight:600;letter-spacing:.08em;font-size:15px;line-height:1.2;text-transform:uppercase;opacity:.85}
+.brand h1{margin:2px 0 0;font-size:clamp(26px,5vw,36px);line-height:1.05;font-weight:700}
+.date{font-size:15px;opacity:.85}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.stat{background:rgba(255,255,255,.1);border-radius:12px;padding:8px 14px;min-width:96px;border:0;color:#fff;text-align:left}
+.stat strong{display:block;font-size:26px;line-height:1.1}
+.stat span{font-size:13px;opacity:.85}
+.stat.hot strong{color:#ffb4a3}
+.people{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.pbtn{display:flex;align-items:center;gap:10px;border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);color:#fff;border-radius:999px;padding:6px 16px 6px 6px;min-height:52px;font-size:16px;font-weight:600}
+.pbtn:hover{background:rgba(255,255,255,.18)}
+.pbtn .av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--sage);color:#fff;font-size:14px;font-weight:700;flex:none}
+.pbtn .cnt{font-size:13px;font-weight:500;opacity:.85;display:block;line-height:1.1}
+.pbtn .cnt b{color:#ffb4a3}
+.pbtn span{text-align:left;line-height:1.2}
+.pbtn[aria-pressed=true]{background:#fff;border-color:#fff;color:var(--deep)}
+.pbtn[aria-pressed=true] .av{background:var(--deep)}
+.pbtn[aria-pressed=true] .cnt b{color:#b8452f}
+.waves{position:absolute;left:0;right:0;bottom:-1px;height:48px;width:100%;display:block}
+.add{background:#fff;color:var(--deep);border:0;border-radius:999px;padding:12px 22px;font-weight:700;min-height:48px;font-size:16px}
+.add:hover{background:var(--pale)}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:18px 0 6px}
+.tabs{display:flex;background:var(--soft);border-radius:999px;padding:4px}
+.tabs button{border:0;background:none;border-radius:999px;padding:8px 16px;min-height:40px;color:var(--muted);font-weight:600}
+.tabs button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.search{flex:1 1 200px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:10px 16px;min-height:44px;font-size:16px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:6px 0 4px;scrollbar-width:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;min-height:38px;font-size:15px;color:var(--muted)}
+.chip[aria-pressed=true]{background:var(--forest);border-color:var(--forest);color:#fff}
+.chips select{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;min-height:38px;font-size:15px;color:var(--muted)}
+.note{background:var(--soft);border-radius:12px;padding:10px 14px;font-size:15px;color:var(--muted);margin:10px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.note button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;min-height:36px;font-size:14px}
+section{margin:22px 0 8px}
+section h2{display:flex;align-items:baseline;gap:10px;font-size:20px;margin:0 0 8px;font-weight:700}
+section h2 small{font-size:14px;color:var(--muted);font-weight:500}
+section.overdue h2{color:var(--hot)}
+.task{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:4px 10px;align-items:start;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px 12px 8px;margin-bottom:8px;cursor:pointer;transition:transform .15s}
+.task:hover{border-color:var(--mist)}
+.task.urgent{border-left:4px solid var(--hot)}
+.task.done .title{text-decoration:line-through;color:var(--muted)}
+.check{width:44px;height:44px;border:0;background:none;display:grid;place-items:center;margin-top:-8px;padding:0}
+.check i{width:24px;height:24px;border-radius:50%;border:2px solid var(--sage);display:grid;place-items:center}
+.check:hover i{background:var(--soft)}
+.done .check i{background:var(--forest);border-color:var(--forest)}
+.done .check i::after{content:"";width:6px;height:11px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.title{font-weight:600;font-size:17px;line-height:1.3}
+.meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:14px;color:var(--muted);margin-top:4px}
+.meta a{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap}
+.tag{display:inline-block;font-size:13px;font-weight:600;border-radius:6px;padding:1px 8px;background:var(--soft);color:var(--accent)}
+.tag.wait{background:none;border:1px dashed var(--sage);color:var(--muted)}
+.tag.work{background:var(--pale);color:var(--deep)}
+.tag.hot{background:var(--hotbg);color:var(--hot)}
+.side{text-align:right;font-size:14px;color:var(--muted);white-space:nowrap}
+.side .late{color:var(--hot);font-weight:600}
+.who{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--sage);color:#fff;font-size:12px;font-weight:700;margin-top:6px}
+.empty{text-align:center;color:var(--muted);padding:36px 12px}
+.empty svg{width:120px;height:60px;display:block;margin:0 auto 10px}
+.fab{display:none}
+dialog{border:0;border-radius:18px;padding:0;width:min(560px,94vw);max-height:92vh;background:var(--card);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(14,40,32,.45)}
+form.sheet{padding:20px 20px 16px;display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+form.sheet h3{grid-column:1/-1;margin:0;font-size:22px}
+label{display:grid;gap:4px;font-size:14px;font-weight:600;color:var(--muted)}
+.full{grid-column:1/-1}
+input,select,textarea{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;font-size:16px;min-height:44px;font-weight:400;color:var(--ink);width:100%}
+textarea{min-height:80px;resize:vertical}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1 1 auto;border:1px solid var(--line);background:var(--bg);border-radius:10px;min-height:40px;padding:6px 10px;font-size:14px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--forest);border-color:var(--forest);color:#fff}
+.seg button.hotsel[aria-pressed=true]{background:var(--hot);border-color:var(--hot)}
+.actions{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:6px}
+.btn{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:10px 18px;min-height:44px;font-weight:600}
+.btn.primary{background:var(--forest);border-color:var(--forest);color:#fff}
+.btn.danger{color:var(--hot);margin-right:auto}
+.team li{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.team ul{list-style:none;margin:0;padding:0}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--deep);color:#fff;border-radius:999px;padding:10px 12px 10px 20px;display:none;gap:12px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:5;max-width:92vw}
+.toast button{background:rgba(255,255,255,.15);border:0;color:#fff;border-radius:999px;padding:8px 14px;font-weight:700}
+footer{color:var(--muted);font-size:13px;padding:30px 0 90px;text-align:center}
+footer button{background:none;border:0;color:var(--accent);font-weight:600;text-decoration:underline;font-size:13px;padding:8px}
+@media(max-width:600px){
+ header{padding:16px 0 54px}.add{display:none}
+ .fab{display:grid;place-items:center;position:fixed;right:18px;bottom:22px;width:60px;height:60px;border-radius:50%;border:0;background:var(--forest);color:#fff;font-size:32px;line-height:1;box-shadow:0 8px 20px rgba(0,0,0,.3);z-index:4}
+ .stat{min-width:0;flex:1 1 0;padding:8px 10px}.stat strong{font-size:22px}
+ .people{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.pbtn{font-size:15px;padding-right:10px}.pbtn span{overflow:hidden}.pbtn span,.pbtn .cnt{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+ .tabs{width:100%}.tabs button{flex:1;padding:8px 6px;font-size:14px;white-space:nowrap}
+ form.sheet{grid-template-columns:minmax(0,1fr)}
+ .task{grid-template-columns:40px minmax(0,1fr)}.side{grid-column:2;text-align:left;display:flex;gap:10px;align-items:center}.who{margin:0}
+}
+@media(prefers-reduced-motion:reduce){.task{transition:none}}
+
+header{padding-top:max(22px,env(safe-area-inset-top))}
+.gate{min-height:100vh;display:grid;place-items:center;background:var(--deep);padding:24px;padding-top:max(24px,env(safe-area-inset-top))}
+.gate .box{background:var(--card);color:var(--ink);border-radius:20px;padding:28px 24px;width:min(420px,100%);display:grid;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.gate img{width:64px;height:64px}
+.gate h1{margin:0;font-size:28px;line-height:1.1}
+.gate p{margin:0;color:var(--muted);font-size:15px}
+.gate .err{color:var(--hot);font-size:15px;min-height:1em}
+.hidden{display:none!important}
+.topline{display:flex;gap:10px;align-items:center}
+.sync{display:inline-flex;align-items:center;gap:6px;font-size:13px;opacity:.85;margin-left:10px}
+.sync i{width:8px;height:8px;border-radius:50%;background:#9be3c4}
+.sync.off i{background:#ffb4a3}
+footer .row{display:flex;gap:4px 14px;flex-wrap:wrap;justify-content:center;align-items:center}
+.who.big{width:34px;height:34px}
+</style>
+</head>
+<body>
+
+<!-- Einrichtung (nur falls config.js leer ist) -->
+<div class="gate hidden" id="setupView"><form class="box" id="setupForm">
+ <img src="icons/emblem.png" alt="">
+ <h1>App verbinden</h1>
+ <p>Trage einmalig die Adresse und den Schlüssel deiner Supabase-Datenbank ein. Besser: beides in <b>config.js</b> eintragen, dann entfällt dieser Schritt auf allen Geräten.</p>
+ <label>Project URL<input id="s_url" placeholder="https://xxxx.supabase.co" autocomplete="off" required></label>
+ <label>Publishable / anon key<input id="s_key" autocomplete="off" required></label>
+ <div class="err" id="setupErr"></div>
+ <button class="btn primary" type="submit">Verbinden</button>
+</form></div>
+
+<!-- Anmeldung -->
+<div class="gate hidden" id="loginView"><form class="box" id="loginForm">
+ <img src="icons/emblem.png" alt="">
+ <div><p style="letter-spacing:.08em;text-transform:uppercase;font-weight:600">Hörakustik Daugsch</p><h1>Aufgaben</h1></div>
+ <label>E-Mail<input id="l_mail" type="email" autocomplete="username" required></label>
+ <label>Passwort<input id="l_pw" type="password" autocomplete="current-password" required></label>
+ <div class="err" id="loginErr"></div>
+ <button class="btn primary" type="submit" id="loginBtn">Anmelden</button>
+ <p>Zugang vergessen? Der Inhaber kann das Passwort in Supabase neu setzen.</p>
+</form></div>
+
+<!-- Name beim ersten Anmelden -->
+<div class="gate hidden" id="nameView"><form class="box" id="nameForm">
+ <img src="icons/emblem.png" alt="">
+ <h1>Wie heißt du?</h1>
+ <p>Dein Name erscheint oben als Button, damit Aufgaben dir zugewiesen werden können.</p>
+ <label>Name<input id="n_name" required maxlength="40" placeholder="z. B. Thomas"></label>
+ <div class="err" id="nameErr"></div>
+ <button class="btn primary" type="submit">Weiter</button>
+</form></div>
+
+<!-- App -->
+<div id="appView" class="hidden">
+<header>
+ <div class="wrap">
+  <div class="brand"><img src="icons/emblem.png" alt=""><div><b>Hörakustik Daugsch</b><h1 id="pageTitle">Aufgaben</h1></div></div>
+  <button class="add" id="addBtn">+ Neue Aufgabe</button>
+ </div>
+ <div class="wrap"><div style="flex-basis:100%"><div class="date"><span id="today"></span><span class="sync off" id="sync"><i></i><span id="syncTxt">verbinde …</span></span></div>
+  <div class="people" id="people" role="group" aria-label="Aufgaben von"></div>
+  <div class="stats" id="stats"></div></div></div>
+ <svg class="waves" viewBox="0 0 1200 48" preserveAspectRatio="none" aria-hidden="true">
+  <path d="M0 18 C200 0 360 34 600 20 S1000 2 1200 16 V48 H0Z" fill="#276955"/>
+  <path d="M0 30 C220 14 420 44 640 30 S1020 16 1200 28 V48 H0Z" fill="#5A8278"/>
+  <path d="M0 40 C240 30 460 52 700 40 S1040 30 1200 38 V48 H0Z" style="fill:var(--bg)"/>
+ </svg>
+</header>
+<main class="wrap">
+ <div class="bar">
+  <div class="tabs" role="group" aria-label="Ansicht">
+   <button data-view="tag" aria-pressed="true">Tagesübersicht</button>
+   <button data-view="alle" aria-pressed="false">Alle offenen</button>
+   <button data-view="erledigt" aria-pressed="false">Erledigt</button>
+  </div>
+  <input class="search" id="q" type="search" placeholder="Suchen: Kunde, Gerät, Notiz …" aria-label="Suchen">
+ </div>
+ <div class="chips" id="cats"></div>
+ <div id="notes"></div>
+ <div id="list"><p class="empty">Aufgaben werden geladen …</p></div>
+</main>
+<footer><div class="row">
+ <span id="meLine"></span>
+ <button id="teamBtn">Team</button>
+ <button id="installBtn" class="hidden">App installieren</button>
+ <button id="logoutBtn">Abmelden</button>
+</div><div id="iosHint" class="hidden" style="margin-top:6px">iPhone/iPad: In Safari auf „Teilen“ tippen → „Zum Home-Bildschirm“.</div></footer>
+<button class="fab" id="fab" aria-label="Neue Aufgabe">+</button>
+</div>
+
+<dialog id="dlg"><form class="sheet" id="form" method="dialog">
+ <h3 id="formTitle">Neue Aufgabe</h3>
+ <label class="full">Aufgabe<input id="f_title" required placeholder="z. B. Kunde wegen Anpassung zurückrufen"></label>
+ <label>Kategorie<select id="f_cat"></select></label>
+ <label>Zuständig<select id="f_who"></select></label>
+ <label>Fällig am<input id="f_due" type="date"></label>
+ <div style="display:grid;gap:4px"><span style="font-size:14px;font-weight:600;color:var(--muted)">Schnell setzen</span>
+  <div class="seg" id="dueQuick"><button type="button" data-d="0">Heute</button><button type="button" data-d="1">Morgen</button><button type="button" data-d="7">+1 Woche</button><button type="button" data-d="14">+2 Wochen</button></div></div>
+ <div class="full" style="display:grid;gap:4px"><span style="font-size:14px;font-weight:600;color:var(--muted)">Priorität</span>
+  <div class="seg" id="f_prio"><button type="button" data-v="hoch" class="hotsel">Dringend</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="niedrig">Später</button></div></div>
+ <div class="full" style="display:grid;gap:4px"><span style="font-size:14px;font-weight:600;color:var(--muted)">Status</span>
+  <div class="seg" id="f_status"><button type="button" data-v="offen">Offen</button><button type="button" data-v="arbeit">In Arbeit</button><button type="button" data-v="wartet">Wartet</button><button type="button" data-v="erledigt">Erledigt</button></div></div>
+ <label>Kundenname<input id="f_cust" autocomplete="off"></label>
+ <label>Telefon<input id="f_phone" type="tel" autocomplete="off"></label>
+ <label>Hersteller<input id="f_maker" list="makers" autocomplete="off"></label>
+ <label>Gerätemodell<input id="f_model" autocomplete="off"></label>
+ <label class="full">Notizen<textarea id="f_notes"></textarea></label>
+ <div class="actions"><button type="button" class="btn danger" id="delBtn">Löschen</button><button type="button" class="btn" id="cancelBtn">Abbrechen</button><button type="submit" class="btn primary">Speichern</button></div>
+</form></dialog>
+<datalist id="makers"><option>Phonak</option><option>Oticon</option><option>Signia</option><option>Widex</option><option>ReSound</option><option>Starkey</option><option>Unitron</option><option>Bernafon</option><option>Rexton</option><option>Hansaton</option><option>Audio Service</option><option>Otoplastik-Labor</option></datalist>
+
+<dialog id="teamDlg"><form class="sheet team" id="teamForm" method="dialog">
+ <h3>Team</h3>
+ <ul class="full" id="teamList"></ul>
+ <label class="full">Mein Name<input id="t_name" maxlength="40"></label>
+ <p class="full" style="margin:0;font-size:14px;color:var(--muted)">Neue Mitarbeiter legst du in Supabase unter <b>Authentication → Users → Add user</b> an. Beim ersten Anmelden tragen sie ihren Namen ein und erscheinen hier automatisch.</p>
+ <div class="actions"><button type="button" class="btn" id="teamClose">Schließen</button><button type="submit" class="btn primary">Namen speichern</button></div>
+</form></dialog>
+
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="toastUndo">Rückgängig</button></div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+</body>
+</html>
