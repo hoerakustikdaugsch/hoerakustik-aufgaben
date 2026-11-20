@@ -1,16 +1,29 @@
 {
-  "name": "Aufgaben · Hörakustik Daugsch",
-  "short_name": "Aufgaben",
+  "name": "Hörakustik Daugsch · Portal",
+  "short_name": "Daugsch",
   "description": "Gemeinsamer Task Manager für Hörakustik Daugsch",
   "lang": "de",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#E9F0ED",
   "theme_color": "#1B493B",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

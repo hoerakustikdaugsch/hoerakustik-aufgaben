@@ -1,8 +1,25 @@
-/* Hörakustik Daugsch · Aufgaben-App
-   Daten: Supabase (Postgres + Live-Sync). Alle angemeldeten Team-Mitglieder sehen dieselben Aufgaben. */
+/* Hörakustik Daugsch · Portal – Start & Aufgaben
+   Daten: Supabase (Postgres + Live-Sync). */
 (() => {
+const VERSION="1.1 · Design C";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
+const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
+const IC={
+ phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
+ user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
+ wrench:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/>',
+ box:'<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+ doc:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+ check:'<path d="M20 6 9 17l-5-5"/>',
+ list:'<path d="M9 6h12M9 12h12M9 18h12M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/>',
+ chat:'<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+ euro:'<path d="M17 6.5A6.5 6.5 0 1 0 17 17.5M4 10h9M4 14h9"/>',
+ cal:'<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+ arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>'};
+const ICON_OF={"Rückruf":"phone","Anpassung":"user","Reservierung":"user","Aufarbeitung":"wrench","Reparatur":"wrench","Otoplastik":"wrench","Bestellung":"box","Zubehör":"box","Lagerausbuchung":"box","Rücksendung Hersteller":"box"};
+const svg=(n,s="")=>`<svg class="i" viewBox="0 0 24 24"${s}>${IC[n]}</svg>`;
 const STATUS={offen:"Offen",arbeit:"In Arbeit",wartet:"Wartet",erledigt:"Erledigt"};
 const PRIO={hoch:0,normal:1,niedrig:2};
 const $=id=>document.getElementById(id);
@@ -12,12 +29,14 @@ const pad=n=>String(n).padStart(2,"0");
 const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 const addDays=(n,base=new Date())=>{const d=new Date(base);d.setDate(d.getDate()+n);return iso(d)};
 const fmtDate=s=>{if(!s)return"";const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d).toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"})};
+const relDate=s=>{const T=iso(new Date());if(!s)return"";if(s===T)return"Heute";if(s===addDays(1))return"Morgen";if(s===addDays(-1))return"seit gestern";if(s<T)return"seit "+fmtDate(s);return fmtDate(s)};
 const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,10));
 const show=v=>["setupView","loginView","nameView","appView"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
 
-let sb=null,me=null,tasks=[],team=[],view="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null;
+let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
+$("ver").textContent=VERSION;
 
-/* ---------- Umwandlung Datenbank <-> App ---------- */
+/* ---------- Datenbank <-> App ---------- */
 const fromRow=r=>({id:r.id,title:r.title,category:r.category,assignee:r.assignee||"",due:r.due||"",priority:r.priority,status:r.status,prevStatus:r.prev_status||null,
  customer:r.customer||"",phone:r.phone||"",manufacturer:r.manufacturer||"",model:r.model||"",notes:r.notes||"",
  createdAt:r.created_at?Date.parse(r.created_at):0,doneAt:r.done_at?Date.parse(r.done_at):null});
@@ -27,7 +46,6 @@ const toRow=t=>({id:t.id,title:t.title,category:t.category||"Sonstiges",assignee
 const putLocal=t=>{const i=tasks.findIndex(x=>x.id===t.id);i<0?tasks.push(t):tasks[i]=t};
 const cache=()=>ls.set("cache",{tasks,team,at:Date.now()});
 
-/* ---------- Speichern (sofort sichtbar, bei Fehler zurück) ---------- */
 async function save(t,before){
  putLocal(t);render();
  const{error}=await sb.from("tasks").upsert(toRow(t));
@@ -40,8 +58,6 @@ async function removeTask(t){
  if(error){putLocal(t);render();toast("Löschen fehlgeschlagen");return false}
  cache();return true;
 }
-
-/* ---------- Daten laden + live halten ---------- */
 async function loadAll(){
  const [o,d,p]=await Promise.all([
   sb.from("tasks").select("*").neq("status","erledigt"),
@@ -60,71 +76,125 @@ function subscribe(){
     sb.from("profiles").select("id,name").order("created_at").then(({data})=>{if(data){team=data;cache();render()}})})
   .subscribe(s=>{if(s==="SUBSCRIBED")setSync(true,"live synchron");else if(s==="CHANNEL_ERROR"||s==="TIMED_OUT"||s==="CLOSED")setSync(false,"Sync unterbrochen")});
 }
-function setSync(ok,txt){live=ok;$("sync").classList.toggle("off",!ok);$("syncTxt").textContent=txt;render()}
-// Beim Zurückkehren zur App (z. B. Handy aus der Tasche) neu abgleichen
+function setSync(ok,txt){live=ok;$("sync").classList.toggle("off",!ok);$("syncTxt").textContent=txt}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&me){loadAll();if(!live)subscribe()}});
 window.addEventListener("online",()=>{if(me){loadAll();subscribe()}});
-window.addEventListener("offline",()=>setSync(false,"offline"));
+window.addEventListener("offline",()=>{setSync(false,"offline");render()});
 
-/* ---------- Anzeige ---------- */
-function match(t){
+/* ---------- Helfer ---------- */
+function match(t,withQ=true){
  if(person!=="alle"&&(t.assignee||"")!==person)return false;
  if(cat&&t.category!==cat&&GROUP_OF[t.category]!==cat)return false;
- if(q){const h=[t.title,t.customer,t.phone,t.manufacturer,t.model,t.notes,t.category].join(" ").toLowerCase();if(!h.includes(q))return false}
+ if(withQ&&q){const h=[t.title,t.customer,t.phone,t.manufacturer,t.model,t.notes,t.category].join(" ").toLowerCase();if(!h.includes(q))return false}
  return true;
 }
 const sortT=(a,b)=>(PRIO[a.priority]??1)-(PRIO[b.priority]??1)||(a.due||"9").localeCompare(b.due||"9")||(a.createdAt||0)-(b.createdAt||0);
+const urgency=(a,b)=>(a.due||"9").localeCompare(b.due||"9")||(PRIO[a.priority]??1)-(PRIO[b.priority]??1);
 const nameOf=id=>team.find(x=>x.id===id)?.name||"";
+const firstName=id=>nameOf(id).split(/\s+/)[0]||"";
 const initials=id=>nameOf(id).split(/\s+/).filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase();
+const greeting=()=>{const h=new Date().getHours();return h<11?"Guten Morgen":h<18?"Guten Tag":"Guten Abend"};
+const isToday=ms=>ms&&iso(new Date(ms))===iso(new Date());
 
+function stats(){
+ const T=iso(new Date()),open=tasks.filter(t=>t.status!=="erledigt"&&match(t,false));
+ const od=open.filter(t=>t.due&&t.due<T),td=open.filter(t=>t.due===T),wait=open.filter(t=>t.status==="wartet");
+ const doneToday=tasks.filter(t=>t.status==="erledigt"&&isToday(t.doneAt)&&match(t,false)).length;
+ return{open,od,td,wait,doneToday,ringTotal:doneToday+od.length+td.length};
+}
+function hero(){
+ const s=stats(),now=new Date(),who=person==="alle"?firstName(me.id):person===me.id?firstName(me.id):firstName(person);
+ const forOther=person!=="alle"&&person!==me.id;
+ const todo=s.od.length+s.td.length;
+ const line=todo===0?(s.open.length?"Für heute ist alles erledigt. Stark!":"Keine offenen Aufgaben."):
+  `Heute ${todo===1?"steht 1 Aufgabe":"stehen "+todo+" Aufgaben"} an${s.od.length?` – ${s.od.length===1?"eine davon ist":s.od.length+" davon sind"} überfällig`:""}.`;
+ const pct=s.ringTotal?s.doneToday/s.ringTotal:0,C=2*Math.PI*50;
+ return `<div class="hero">
+  <div class="txt"><span class="date">${now.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})}</span>
+   <h1>${forOther?"Aufgaben von "+esc(who):esc(greeting())+(who?", "+esc(who):"")}</h1><p>${line}</p></div>
+  <div class="kpis">
+   <button class="kpi ${s.od.length?"hot":""}" data-go="aufgaben"><strong>${s.od.length}</strong><span>Überfällig</span></button>
+   <button class="kpi" data-go="aufgaben"><strong>${s.td.length}</strong><span>Heute</span></button>
+   <button class="kpi" data-go="aufgaben"><strong>${s.wait.length}</strong><span>Wartet</span></button>
+  </div>
+  <div class="ring" role="img" aria-label="${s.doneToday} von ${s.ringTotal} heute erledigt"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="#E3EBE8" stroke-width="12"/><circle cx="60" cy="60" r="50" fill="none" stroke="#276955" stroke-width="12" stroke-linecap="round" stroke-dasharray="${(pct*C).toFixed(1)} ${C.toFixed(1)}"/></svg>
+   <div><b>${s.doneToday}/${s.ringTotal}</b><small>heute erledigt</small></div></div>
+ </div>`;
+}
+function peopleRow(){
+ const T=iso(new Date()),open=tasks.filter(t=>t.status!=="erledigt");
+ return `<div class="people" role="group" aria-label="Aufgaben von">${[["alle","Alle"],...team.map(m=>[m.id,m.name])].map(([id,n])=>{
+  const own=open.filter(t=>id==="alle"||t.assignee===id),late=own.filter(t=>t.due&&t.due<T).length;
+  return `<button class="pbtn" data-person="${esc(id)}" aria-pressed="${person===id}"><i class="av">${id==="alle"?"★":esc(initials(id))}</i><span><b>${esc(n)}${id===me.id?" (ich)":""}</b><small>${own.length} offen${late?` · <em>${late} überfällig</em>`:""}</small></span></button>`}).join("")}</div>`;
+}
 function card(t){
- const T=iso(new Date()),late=t.due&&t.due<T&&t.status!=="erledigt";
- const st=t.status&&t.status!=="offen"&&t.status!=="erledigt"?`<span class="tag ${t.status==="wartet"?"wait":"work"}">${STATUS[t.status]}</span>`:"";
+ const T=iso(new Date()),late=t.due&&t.due<T&&t.status!=="erledigt",g=GROUP_OF[t.category]||"Verwaltung";
+ const tile=late||t.priority==="hoch"&&t.status!=="erledigt"?"t-hot":TILE[g];
+ const ic=ICON_OF[t.category]||(g==="Verwaltung"?"doc":"user");
+ const st=t.status==="wartet"?'<span class="tag wait">Wartet</span>':t.status==="arbeit"?'<span class="tag work">In Arbeit</span>':"";
  const device=[t.manufacturer,t.model].filter(Boolean).join(" ");
- const tel=t.phone?`<a href="tel:${esc(t.phone.replace(/[^\d+]/g,""))}" data-stop>☎ ${esc(t.phone)}</a>`:"";
- return `<article class="task${t.priority==="hoch"?" urgent":""}${t.status==="erledigt"?" done":""}" data-id="${esc(t.id)}">
-  <button class="check" data-check aria-label="${t.status==="erledigt"?"Wieder öffnen":"Als erledigt markieren"}"><i></i></button>
-  <div><div class="title">${esc(t.title)}</div>
-   <div class="meta"><span class="tag">${esc(t.category||"Sonstiges")}</span>${t.priority==="hoch"?'<span class="tag hot">Dringend</span>':""}${st}
-   ${t.customer?`<span>${esc(t.customer)}</span>`:""}${tel}${device?`<span>${esc(device)}</span>`:""}</div>
-   ${t.notes?`<div class="meta">${esc(t.notes.length>110?t.notes.slice(0,110)+"…":t.notes)}</div>`:""}</div>
-  <div class="side">${t.due?`<div class="${late?"late":""}">${late?"seit ":""}${esc(fmtDate(t.due))}</div>`:""}${t.assignee&&initials(t.assignee)?`<span class="who" title="${esc(nameOf(t.assignee))}">${esc(initials(t.assignee))}</span>`:""}</div>
+ const tel=t.phone?`<a href="tel:${esc(t.phone.replace(/[^\d+]/g,""))}" data-stop>${esc(t.phone)}</a>`:"";
+ const dl=t.status==="erledigt"&&t.doneAt?"erledigt "+new Date(t.doneAt).toLocaleDateString("de-DE",{day:"numeric",month:"short"}):relDate(t.due);
+ const av=t.assignee&&initials(t.assignee)?`<span class="who" title="${esc(nameOf(t.assignee))}">${esc(initials(t.assignee))}</span>`:"";
+ return `<article class="task${t.priority==="hoch"||late?" urgent":""}${t.status==="erledigt"?" done":""}" data-id="${esc(t.id)}">
+  <span class="tile ${tile}">${svg(ic)}</span>
+  <div class="body"><span class="title">${esc(t.title)}</span>
+   <div class="meta"><span>${esc(t.category||"Sonstiges")}</span>${t.priority==="hoch"&&t.status!=="erledigt"?'<span class="tag hot">Dringend</span>':""}${st}${t.customer?`<span>${esc(t.customer)}</span>`:""}${tel}${device?`<span>${esc(device)}</span>`:""}</div>
+   ${t.notes?`<div class="meta">${esc(t.notes.length>120?t.notes.slice(0,120)+"…":t.notes)}</div>`:""}
+   <div class="meta mside">${dl?`<span class="${late?"late":""}" style="${late?"color:var(--hot);font-weight:700":""}">${esc(dl)}</span>`:""}${t.assignee?`<span>${esc(firstName(t.assignee))}</span>`:""}</div></div>
+  <div class="side">${dl?`<span class="${late?"late":""}">${esc(dl)}</span>`:""}${av}</div>
+  <button class="check" data-check aria-label="${t.status==="erledigt"?"Wieder öffnen":"Als erledigt markieren"}">${t.status==="erledigt"?svg("check",' style="width:18px;height:18px;stroke-width:3"'):""}</button>
  </article>`;
 }
-const sec=(title,list,cls="")=>list.length?`<section class="${cls}"><h2>${title} <small>${list.length}</small></h2>${list.sort(sortT).map(card).join("")}</section>`:"";
+const sec=(title,list,cls="")=>list.length?`<section class="list ${cls}"><h3>${title} <small>${list.length}</small></h3>${list.sort(sortT).map(card).join("")}</section>`:"";
+const emptyBox=txt=>`<div class="empty"><svg viewBox="0 0 120 50" width="120" height="50" aria-hidden="true"><path d="M2 25 C22 5 42 45 62 25 S102 5 118 25" fill="none" stroke="#8BAAA2" stroke-width="4" stroke-linecap="round"/><path d="M2 40 C22 20 42 60 62 40 S102 20 118 40" fill="none" stroke="#B7C6C2" stroke-width="4" stroke-linecap="round"/></svg><p>${txt}</p></div>`;
 
-function render(){
- if(!me)return;
- const now=new Date(),T=iso(now),TM=addDays(1),SUN=addDays(6-(now.getDay()+6)%7);
- $("today").textContent=now.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
- if(person!=="alle"&&team.length&&!team.some(m=>m.id===person))person="alle";
- const open=tasks.filter(t=>t.status!=="erledigt"),mine=open.filter(match);
- const od=mine.filter(t=>t.due&&t.due<T),td=mine.filter(t=>t.due===T);
- $("people").innerHTML=[["alle","Alle"],...team.map(m=>[m.id,m.name])].map(([id,n])=>{
-  const own=open.filter(t=>id==="alle"||t.assignee===id),late=own.filter(t=>t.due&&t.due<T).length;
-  const av=id==="alle"?"★":esc(initials(id));
-  return `<button class="pbtn" data-person="${esc(id)}" aria-pressed="${person===id}"><i class="av" aria-hidden="true">${av}</i><span>${esc(n)}${id===me.id?" (ich)":""}<small class="cnt">${own.length} offen${late?` · <b>${late} überfällig</b>`:""}</small></span></button>`}).join("");
- $("pageTitle").textContent=person==="alle"?"Aufgaben":person===me.id?"Meine Aufgaben":"Aufgaben von "+(nameOf(person)||"…");
- $("stats").innerHTML=[["hot",od.length,"Überfällig"],["",td.length,"Heute fällig"],["",mine.filter(t=>t.status==="wartet").length,"Wartet"],["",mine.length,"Offen gesamt"]]
-  .map(([c,n,l])=>`<div class="stat ${n&&c?c:""}"><strong>${n}</strong><span>${l}</span></div>`).join("");
- $("cats").innerHTML=`<button class="chip" data-cat="" aria-pressed="${!cat}">Alle Kategorien</button>`+CATS.map(([g])=>`<button class="chip" data-cat="${esc(g)}" aria-pressed="${cat===g}">${esc(g)}</button>`).join("")+
-  `<select id="catSel" aria-label="Einzelne Kategorie"><option value="">Genauer …</option>${CATS.map(([g,cs])=>`<optgroup label="${esc(g)}">${cs.map(c=>`<option ${cat===c?"selected":""}>${esc(c)}</option>`).join("")}</optgroup>`).join("")}</select>`;
- document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.view===view));
- let n="";
- if(!navigator.onLine){const c=ls.get("cache",null);n+=`<div class="note">Keine Internetverbindung – du siehst den Stand von ${c?new Date(c.at).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"vorhin"} Uhr. Änderungen sind erst wieder online möglich.</div>`}
- $("notes").innerHTML=n;
+/* ---------- Seiten ---------- */
+function startPage(){
+ const s=stats(),next=s.open.slice().sort(urgency).slice(0,5);
+ const mod=(ic,tile,title,txt,go,dis)=>`<button class="mod" ${dis?"disabled":`data-go="${go}"`}><span class="tile ${tile}">${svg(ic)}</span><h3>${title}</h3><p>${txt}</p><span class="go">${dis?'<span class="soon">bald</span>':"Öffnen →"}</span></button>`;
+ return hero()+peopleRow()+
+  `<div class="modules">${mod("list","t-kunden","Aufgaben",`${s.open.length} offen${s.od.length?" · "+s.od.length+" überfällig":""}`,"aufgaben")}${mod("chat","t-werkstatt","Beratung","Anamnese, Bedarfsanalyse, Empfehlung und Broschüre","",1)}${mod("euro","t-lager","Preise","Geräte, Preisstufen und Zusatzpositionen","",1)}${mod("cal","t-verwaltung","Kalender","Termine aus AkuWin","",1)}</div>`+
+  `<section class="list"><h3>Als Nächstes <small>${next.length}</small></h3>${next.length?next.map(card).join(""):emptyBox("Keine offenen Aufgaben.")}${s.open.length>5?`<button class="btn" data-go="aufgaben" style="align-self:flex-start">Alle ${s.open.length} Aufgaben ${svg("arrow")}</button>`:""}</section>`;
+}
+function tasksPage(){
+ const T=iso(new Date()),TM=addDays(1),now=new Date(),SUN=addDays(6-(now.getDay()+6)%7);
+ const open=tasks.filter(t=>t.status!=="erledigt"),mine=open.filter(t=>match(t));
  let h="";
- if(!loaded&&!tasks.length)h=`<p class="empty">Aufgaben werden geladen …</p>`;
- else if(view==="tag"){
+ if(tab==="tag"){
+  const od=mine.filter(t=>t.due&&t.due<T),td=mine.filter(t=>t.due===T);
   const rest=mine.filter(t=>!(t.due&&t.due<=T)),nw=rest.filter(t=>t.status!=="wartet");
   h=sec("Überfällig",od,"overdue")+sec("Heute",td)+sec("Morgen",nw.filter(t=>t.due===TM))+sec("Diese Woche",nw.filter(t=>t.due>TM&&t.due<=SUN))+
-   sec("Später",nw.filter(t=>t.due>SUN&&t.due>TM))+sec("Ohne Datum",nw.filter(t=>!t.due))+sec("Wartet auf Hersteller / Krankenkasse",rest.filter(t=>t.status==="wartet"));
- }else if(view==="alle")h=sec("Alle offenen Aufgaben",mine.slice());
+   sec("Später",nw.filter(t=>t.due>SUN&&t.due>TM))+sec("Ohne Datum",nw.filter(t=>!t.due))+sec("Wartet auf Rückmeldung",rest.filter(t=>t.status==="wartet"));
+ }else if(tab==="alle")h=sec("Alle offenen Aufgaben",mine.slice());
  else{const d=tasks.filter(t=>t.status==="erledigt"&&match(t)).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,100);
-  h=d.length?`<section><h2>Zuletzt erledigt <small>${d.length}</small></h2>${d.map(card).join("")}</section>`:""}
- if(!h)h=`<div class="empty"><svg viewBox="0 0 120 60" aria-hidden="true"><path d="M0 30 C20 10 40 50 60 30 S100 10 120 30" fill="none" stroke="#8BAAA2" stroke-width="4" stroke-linecap="round"/><path d="M0 44 C20 24 40 64 60 44 S100 24 120 44" fill="none" stroke="#B7C6C2" stroke-width="4" stroke-linecap="round"/></svg>${view==="erledigt"?"Noch nichts erledigt.":q||cat||person!=="alle"?"Keine Aufgaben für diesen Filter.":"Keine offenen Aufgaben. Mit „+“ legst du die erste an."}</div>`;
- $("list").innerHTML=h;
+  h=d.length?`<section class="list"><h3>Zuletzt erledigt <small>${d.length}</small></h3>${d.map(card).join("")}</section>`:""}
+ if(!h)h=emptyBox(!loaded&&!tasks.length?"Aufgaben werden geladen …":tab==="erledigt"?"Noch nichts erledigt.":q||cat||person!=="alle"?"Keine Aufgaben für diesen Filter.":"Keine offenen Aufgaben. Mit „+“ legst du die erste an.");
+ const waits=open.filter(t=>t.status==="wartet"&&match(t,false)).sort(urgency);
+ const aside=`<aside class="aside"><h3>Wartet auf Rückmeldung</h3>${waits.length?waits.slice(0,6).map(t=>`<button class="w" data-open="${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc([t.customer,t.manufacturer].filter(Boolean).join(" · ")||t.category)}${t.due?" · nachfassen "+esc(relDate(t.due)):""}</small></button>`).join(""):'<span class="note">Gerade wartet nichts auf Hersteller oder Krankenkasse.</span>'}
+  <span class="note" style="margin-top:6px;display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${live?"#9BE3C4":"#FFB4A3"}"></span>${live?"Live synchron mit allen Geräten":"Nicht verbunden"}</span></aside>`;
+ const offline=!navigator.onLine?(()=>{const c=ls.get("cache",null);return `<div class="hint">Keine Internetverbindung – Stand von ${c?new Date(c.at).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"vorhin"} Uhr.</div>`})():"";
+ return `<div class="bar"><h2>Aufgaben</h2>
+   <div class="tabs" role="group" aria-label="Ansicht"><button data-tab="tag" aria-pressed="${tab==="tag"}">Tagesübersicht</button><button data-tab="alle" aria-pressed="${tab==="alle"}">Alle offenen</button><button data-tab="erledigt" aria-pressed="${tab==="erledigt"}">Erledigt</button></div>
+   <label class="search">${svg("search")}<input id="q" type="search" placeholder="Kunde, Gerät, Notiz suchen …" aria-label="Suchen" value="${esc(q)}"></label></div>`+
+  peopleRow()+
+  `<div class="chips"><button class="chip" data-cat="" aria-pressed="${!cat}">Alle Kategorien</button>${CATS.map(([g])=>`<button class="chip" data-cat="${esc(g)}" aria-pressed="${cat===g}">${esc(g)}</button>`).join("")}<select id="catSel" aria-label="Einzelne Kategorie"><option value="">Genauer …</option>${CATS.map(([g,cs])=>`<optgroup label="${esc(g)}">${cs.map(c=>`<option ${cat===c?"selected":""}>${esc(c)}</option>`).join("")}</optgroup>`).join("")}</select></div>`+
+  offline+`<div class="grid2"><div>${h}</div>${aside}</div>`;
+}
+function render(){
+ if(!me)return;
+ const p=page==="erledigt"?"aufgaben":page;
+ if(person!=="alle"&&team.length&&!team.some(m=>m.id===person))person="alle";
+ document.querySelectorAll("[data-go]").forEach(b=>{if(b.closest(".mainnav,.mobnav")){const g=b.dataset.go;b.setAttribute("aria-current",(g===p&&!(g==="aufgaben"&&tab==="erledigt"))||(g==="erledigt"&&p==="aufgaben"&&tab==="erledigt")?"page":"false")}});
+ const focus=document.activeElement&&document.activeElement.id==="q";
+ $("main").innerHTML=p==="aufgaben"?tasksPage():startPage();
+ if(focus){const i=$("q");i.focus();i.setSelectionRange(i.value.length,i.value.length)}
  $("meLine").textContent="Angemeldet als "+(nameOf(me.id)||me.email);
+}
+function go(target){
+ if(target==="erledigt"){page="aufgaben";tab="erledigt"}
+ else{page=target;if(target==="aufgaben"&&tab==="erledigt")tab="tag"}
+ ls.set("page",page);render();window.scrollTo({top:0,behavior:"smooth"});
 }
 
 /* ---------- Formular ---------- */
@@ -158,16 +228,17 @@ $("dueQuick").onclick=e=>{const b=e.target.closest("button");if(b)$("f_due").val
 $("delBtn").onclick=async()=>{const b=$("delBtn");if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Wirklich löschen?";return}
  const t={...editing};$("dlg").close();if(await removeTask(t))toast("Aufgabe gelöscht",()=>save(t))};
 
-/* ---------- Toast ---------- */
 let tt;function toast(msg,undo){$("toastMsg").textContent=msg;$("toastUndo").style.display=undo?"":"none";$("toastUndo").onclick=()=>{undo&&undo();$("toast").style.display="none"};
  $("toast").style.display="flex";clearTimeout(tt);tt=setTimeout(()=>$("toast").style.display="none",undo?6000:2200)}
 
 /* ---------- Klicks ---------- */
 document.addEventListener("click",e=>{
  const el=e.target;if(!me||el.closest("[data-stop]")||el.closest("dialog"))return;
- const v=el.closest("[data-view]");if(v){view=v.dataset.view;render();return}
+ const g=el.closest("[data-go]");if(g){e.preventDefault();go(g.dataset.go);return}
+ const tb=el.closest("[data-tab]");if(tb){tab=tb.dataset.tab;render();return}
  const p=el.closest("[data-person]");if(p){person=p.dataset.person;ls.set("person",person);render();return}
  const c=el.closest("[data-cat]");if(c){cat=c.dataset.cat;ls.set("cat",cat);render();return}
+ const o=el.closest("[data-open]");if(o){const t=tasks.find(x=>x.id===o.dataset.open);if(t)openForm(t);return}
  const art=el.closest(".task");if(!art)return;
  const t=tasks.find(x=>x.id===art.dataset.id);if(!t)return;
  if(el.closest("[data-check]")){
@@ -177,22 +248,21 @@ document.addEventListener("click",e=>{
  openForm(t);
 });
 document.addEventListener("change",e=>{if(e.target.id==="catSel"){cat=e.target.value;ls.set("cat",cat);render()}});
-$("q").addEventListener("input",e=>{q=e.target.value.trim().toLowerCase();render()});
+document.addEventListener("input",e=>{if(e.target.id==="q"){q=e.target.value.trim().toLowerCase();render()}});
 $("addBtn").onclick=$("fab").onclick=()=>openForm();
 
-/* ---------- Team / eigener Name ---------- */
-$("teamBtn").onclick=()=>{$("teamList").innerHTML=team.map(m=>`<li><span>${esc(m.name)}${m.id===me.id?" (ich)":""}</span></li>`).join("")||"<li>Noch niemand.</li>";$("t_name").value=nameOf(me.id);$("teamDlg").showModal()};
+/* ---------- Team ---------- */
+function openTeam(){$("teamList").innerHTML=team.map(m=>`<li>${esc(m.name)}${m.id===me.id?" (ich)":""}</li>`).join("")||"<li>Noch niemand.</li>";$("t_name").value=nameOf(me.id);$("teamDlg").showModal()}
+$("teamBtn").onclick=openTeam;$("mobTeam").onclick=openTeam;
 $("teamClose").onclick=()=>$("teamDlg").close();
 $("teamForm").addEventListener("submit",async e=>{e.preventDefault();const n=$("t_name").value.trim();if(!n)return;
  const{error}=await sb.from("profiles").upsert({id:me.id,name:n});if(error){toast("Name nicht gespeichert");return}
  const m=team.find(x=>x.id===me.id);m?m.name=n:team.push({id:me.id,name:n});$("teamDlg").close();render();toast("Name gespeichert")});
 
-/* ---------- Installieren ---------- */
+/* ---------- Installieren & Service Worker ---------- */
 let installEvt=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;$("installBtn").classList.remove("hidden")});
 $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();await installEvt.userChoice;installEvt=null;$("installBtn").classList.add("hidden")};
-const standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
-if(/iphone|ipad|ipod/i.test(navigator.userAgent)&&!standalone)$("iosHint").classList.remove("hidden");
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
 
 /* ---------- Anmeldung ---------- */
@@ -202,7 +272,8 @@ $("loginForm").addEventListener("submit",async e=>{
  $("loginBtn").disabled=false;
  if(error)$("loginErr").textContent=/invalid/i.test(error.message)?"E-Mail oder Passwort stimmt nicht.":"Anmeldung fehlgeschlagen: "+error.message;
 });
-$("logoutBtn").onclick=async()=>{await sb.auth.signOut();try{localStorage.removeItem("hd_cache")}catch{}};
+const logout=async()=>{$("teamDlg").close();await sb.auth.signOut();try{localStorage.removeItem("hd_cache")}catch{}};
+$("logoutBtn").onclick=logout;$("logoutBtn2").onclick=logout;
 $("nameForm").addEventListener("submit",async e=>{e.preventDefault();const n=$("n_name").value.trim();if(!n)return;
  const{error}=await sb.from("profiles").upsert({id:me.id,name:n});
  if(error){$("nameErr").textContent="Konnte nicht gespeichert werden: "+error.message;return}
@@ -217,9 +288,8 @@ async function onSession(session){
  if(!error&&!data){show("nameView");$("n_name").focus();return}
  enterApp();
 }
-function enterApp(){show("appView");render();loadAll();subscribe();setInterval(render,60000)}
+function enterApp(){show("appView");render();loadAll();subscribe();clearInterval(timer);timer=setInterval(render,60000)}
 
-/* ---------- Start ---------- */
 function start(url,key){
  if(!window.supabase||!window.supabase.createClient){show("setupView");$("setupErr").textContent="Die Datenbank-Bibliothek konnte nicht geladen werden. Bitte Internetverbindung prüfen und neu laden.";return}
  sb=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true}});
