@@ -39,7 +39,7 @@ const band=ek=>{const b=P()&&P().bandFor(ek);return b?[b.name,b.stage,0,0,Number
 function quote(dev,count,otos){const q=P()&&P().quote(dev.raw,S.kunde.kasse==="gkv"?"gkv":"privat",count,otos);return q?{lines:q.lines.map(l=>[l.label,l.amount]),total:q.total}:null}
 const stageFrom=id=>{if(SNAP_PRICES)return SNAP_PRICES[id]||{vk:0,gkv:0};return(P()&&P().stageFrom(id))||{vk:0,gkv:0}};
 
-const empty=()=>({kunde:{vorname:"",nachname:"",geb:"",tel:"",mail:"",kasse:"gkv",kk:"",verordnung:"",vdatum:"",hno:"",versorgung:"erst"},
+const empty=()=>({kunde:{anrede:"",vorname:"",nachname:"",geb:"",tel:"",mail:"",kasse:"gkv",kk:"",verordnung:"",vdatum:"",hno:"",versorgung:"erst"},
  an:{seit:"",verlauf:"",seite:"",bemerkt:"",hoersturz:"",hsWann:"",hsSeite:"",laerm:"",laermArt:[],entz:[],ops:[],tinn:"",tinnSeite:"",tinnBel:0,tinnArt:"",
   schwindel:"",druck:"",hyper:"",schmerz:"",ausfluss:"",puls:"",schmalz:"",allergie:"",allergieText:"",familie:"",meds:"",allg:[],handling:[],hgAlt:"",hgModell:"",hgTrage:"",hgZufr:"",hgStoer:""},
  audio:{R:{},L:{}},sit:{},leben:[],technik:"",phone:"",frei:"",wuensche:[],bauform:"",energie:"",budget:"",ziele:[{t:"",p:1}],override:"",device:"",otos:-1,tasks:[],
@@ -111,7 +111,7 @@ function audioSvg(big=false){
 /* ---------- Schritte ---------- */
 function stepKunde(){
  const k="kunde";
- return card("Kunde",`<div class="form">${inp(k+".vorname","Vorname")}${inp(k+".nachname","Nachname")}${inp(k+".geb","Geburtsdatum","date")}${inp(k+".tel","Telefon","tel")}${inp(k+".mail","E-Mail","email","","full")}</div>`)+
+ return card("Kunde",`<div class="q"><span class="ql">Anrede</span>${chips(k+".anrede",["Frau","Herr","neutral"])}</div><div class="form">${inp(k+".vorname","Vorname")}${inp(k+".nachname","Nachname")}${inp(k+".geb","Geburtsdatum","date")}${inp(k+".tel","Telefon","tel")}${inp(k+".mail","E-Mail","email","","full")}</div>`)+
  card("Krankenversicherung",`<div class="q"><span class="ql">Versicherung</span><div class="chips"><button type="button" class="chip" data-set="kunde.kasse" data-v="gkv" aria-pressed="${S.kunde.kasse==="gkv"}">Gesetzlich</button><button type="button" class="chip" data-set="kunde.kasse" data-v="privat" aria-pressed="${S.kunde.kasse==="privat"}">Privat</button></div></div>
   <div class="form">${inp(k+".kk","Krankenkasse","text","z. B. AOK, TK, Barmer","full")}</div>
   ${yn(k+".verordnung","Ärztliche Verordnung liegt vor",`<div class="form">${inp(k+".vdatum","Datum der Verordnung","date")}${inp(k+".hno","HNO-Arzt")}</div>`)}`)+
@@ -202,7 +202,7 @@ function stepAbschluss(){
  card("Termin",`<div class="audtop"><button class="btn" disabled>Termin in AkuWin anlegen <span class="soon">bald</span></button><span class="muted">Freie Zeiten sehen und den Anpasstermin direkt mit dem Kunden vereinbaren.</span></div>`)+
  card("Broschüre für den Kunden",`<div class="brochure"><div class="bthumb"><span>Hörakustik Daugsch</span><b>Ihre persönliche Hörberatung</b><small>${esc(n)}</small></div>
   <div><p>Die Broschüre fasst alles zusammen: Hörsituation, Audiogramm, Hörprofil, Wünsche und Hörziele, Empfehlung mit Leistungsprofil, Preisorientierung und die Übersicht aller sechs Technikstufen – gestaltet für den Druck auf A4.</p>
-  <button class="btn primary" disabled>Broschüre erstellen (Phase 3)</button></div></div>`)+card("Beratung abschließen",`<p class="muted">${S.status==="abgeschlossen"?"Diese Beratung ist abgeschlossen.":"Alles wird laufend gespeichert. Mit „Abschließen“ markierst du die Beratung als fertig."}</p><button class="btn ${S.status==="abgeschlossen"?"":"primary"}" data-finish>${S.status==="abgeschlossen"?"Wieder öffnen":"Beratung abschließen"}</button>`);
+  <button class="btn primary" data-brochure>Broschüre erstellen</button></div></div>`)+card("Beratung abschließen",`<p class="muted">${S.status==="abgeschlossen"?"Diese Beratung ist abgeschlossen.":"Alles wird laufend gespeichert. Mit „Abschließen“ markierst du die Beratung als fertig."}</p><button class="btn ${S.status==="abgeschlossen"?"":"primary"}" data-finish>${S.status==="abgeschlossen"?"Wieder öffnen":"Beratung abschließen"}</button>`);
 }
 
 
@@ -332,6 +332,231 @@ function editView(){
 }
 function render(){const h=mode==="edit"?editView():listView();setTimeout(pushCustomer,0);return h}
 
+
+/* ---------- Broschüre (A4, Druck / PDF) ---------- */
+const FIRMA={name:"Hörakustik Daugsch",claim:"natürlich · individuell · hören",person:"Guido Daugsch",rolle:"Geschäftsführer & Inhaber · Hörakustikmeister",
+ str:"Ludwig-Schwamb-Straße 19",ort:"67574 Osthofen",tel:"06242 50 69 744",mail:"hallo@hoerakustik-daugsch.de",web:"www.hoerakustik-daugsch.de",
+ zeiten:[["Montag, Dienstag, Donnerstag","10 – 17 Uhr"],["Mittwoch, Freitag","10 – 14 Uhr"]]};
+const TECH=[
+ ["Richtmikrofone","Zwei Mikrofone je Gerät erkennen, aus welcher Richtung Sprache kommt, und heben Ihr Gegenüber hervor – Geräusche von hinten treten in den Hintergrund."],
+ ["Störgeräuschunterdrückung","Gleichmäßige Geräusche wie Lüftung, Motor oder Stimmengewirr werden gedämpft, Sprache bleibt klar."],
+ ["Automatische Situationserkennung","Das Hörsystem erkennt laufend, wo Sie sind – ruhiges Wohnzimmer, Restaurant, Straße – und stellt sich selbst passend ein."],
+ ["Sprachfokus & Bewegung","Höhere Stufen erkennen mehrere Sprecher und sogar Ihre Bewegung, etwa beim Gehen, und passen den Fokus an."],
+ ["Rückkopplungsschutz","Verhindert das bekannte Pfeifen, auch beim Umarmen oder Telefonieren."],
+ ["Bluetooth-Streaming","Telefonate, Musik und Fernsehton kommen direkt in beide Ohren – je nach Gerät auch freihändig telefonieren."],
+ ["App-Steuerung","Lautstärke und Programme bequem am Smartphone einstellen, Klang an Ihre Vorlieben anpassen."],
+ ["Akku","Über Nacht im Ladeetui aufladen – kein Batteriewechsel, ein ganzer Tag Hören."],
+ ["Tinnitus-Funktion","Ein sanftes, einstellbares Rauschen kann Ohrgeräusche überdecken und entlasten."],
+ ["Bauformen","Hinter dem Ohr mit Hörer im Gehörgang (RIC), klassisch hinter dem Ohr (HdO) oder individuell im Ohr (IdO) – je nach Hörverlust, Ohr und Wunsch."]];
+const NEXT=[["Probetragen","Sie testen Ihre Hörsysteme in Ihrem Alltag – zu Hause, unterwegs, im Gespräch."],["Feinanpassung","Gemeinsam stimmen wir den Klang auf Ihre Erfahrungen und Ihre Hörziele ab."],["Hörziele prüfen","Wir prüfen Ziel für Ziel, wie gut es sich verbessert hat – und optimieren weiter."],["Versorgung & Nachsorge","Sie entscheiden sich, wir kümmern uns um die Kasse. Danach sind wir regelmäßig für Service und Kontrolle für Sie da."]];
+const salut=()=>{const k=S.kunde,n=[k.vorname,k.nachname].filter(Boolean).join(" ");return k.anrede==="Herr"?`Lieber Herr ${k.nachname||n}`:k.anrede==="Frau"?`Liebe Frau ${k.nachname||n}`:`Guten Tag ${n||""}`.trim()};
+function friendlySituation(){
+ const a=S.an,parts=[];
+ if(a.seit)parts.push(`Ihr Hörverlust besteht seit ${a.seit==="weniger als 3 Monate"?"weniger als drei Monaten":a.seit.replace("unter","weniger als").replace("über","mehr als")}`);
+ if(a.verlauf)parts.push(`er hat sich ${a.verlauf==="schleichend"?"schleichend entwickelt":a.verlauf==="plötzlich"?"plötzlich bemerkbar gemacht":"schwankend gezeigt"}`);
+ let s=parts.join(" – ");if(a.seite)s+=(s?" und betrifft ":"Ihr Hörverlust betrifft ")+(a.seite==="beidseitig"?"beide Ohren":a.seite==="einseitig rechts"?"vor allem das rechte Ohr":"vor allem das linke Ohr");if(s)s+=".";
+ const out=[s];
+ if(a.bemerkt)out.push(a.bemerkt==="Angehörige"?"Zuerst aufgefallen ist er Ihren Angehörigen – das ist sehr typisch, denn ein Hörverlust entwickelt sich oft unbemerkt.":a.bemerkt==="selbst"?"Sie haben die Veränderung selbst bemerkt.":"Festgestellt wurde er bei einer ärztlichen Untersuchung bzw. einem Hörtest.");
+ if(a.tinn==="ja")out.push(`Zusätzlich nehmen Sie ein Ohrgeräusch wahr${a.tinnArt?" („"+a.tinnArt+"“)":""}${a.tinnSeite?", "+(a.tinnSeite==="beidseitig"?"auf beiden Seiten":a.tinnSeite==="im Kopf"?"im Kopf":"auf der "+a.tinnSeite+"n Seite"):""}. Moderne Hörsysteme können hier spürbar entlasten.`);
+ if(a.laerm==="ja")out.push("Ihr Gehör war in der Vergangenheit Lärm ausgesetzt – ein häufiger Grund für Hörverluste im Bereich hoher Töne, in dem viele Sprachlaute liegen.");
+ if(a.hgAlt==="ja")out.push(`Sie haben bereits Erfahrung mit Hörgeräten${a.hgModell?" ("+a.hgModell+")":""} – darauf bauen wir auf.`);else if(a.hgAlt==="nein")out.push("Es ist Ihre erste Versorgung mit Hörsystemen. Wir begleiten Sie Schritt für Schritt.");
+ return out.filter(Boolean);
+}
+function brochureHtml(){
+ refreshDevices();
+ const rec=recommend(),si=curStage(),st=STAGES[si],count=ears(),gkv=S.kunde.kasse==="gkv";
+ const dev=DEVICES.find(d=>d.id===S.device),otos=S.otos<0?(dev&&dev.oto?count:0):S.otos,q=dev?quote(dev,count,otos):null;
+ const date=new Date().toLocaleDateString("de-DE",{day:"numeric",month:"long",year:"numeric"}),nm=name();
+ const base=location.href.split("#")[0].replace(/[^/]*$/,"");
+ const dotsB=(n,c)=>`<span class="d">${[1,2,3,4,5].map(i=>`<i style="background:${i<=n?c:"#E1E9E6"}"></i>`).join("")}</span>`;
+ const hard=SITS.filter(s=>S.sit[s.id]&&S.sit[s.id].d>0).sort((a,b)=>S.sit[b.id].d-S.sit[a.id].d||((S.sit[b.id].i??1)-(S.sit[a.id].i??1)));
+ const dimTxt=["In ruhiger Umgebung","Bei Gesprächen mit mehreren","In lebhafter Umgebung"];
+ const needTxt=["kaum Unterstützung","etwas Unterstützung","spürbare Unterstützung","viel Unterstützung","sehr viel Unterstützung"];
+ const goals=S.ziele.filter(z=>z.t).sort((a,b)=>a.p-b.p);
+ const wishes=[...S.wuensche,S.bauform&&S.bauform!=="noch offen"?"Bauform: "+S.bauform:"",S.energie&&S.energie!=="egal"?"Energie: "+S.energie:""].filter(Boolean);
+ const dR=degree(pta("R")),dL=degree(pta("L"));
+ const foot=(n)=>`<footer><span>${FIRMA.name} · ${FIRMA.claim}</span><span>${n}</span></footer>`;
+ const reasons=DIMS.map((d,i)=>{const ex=SITS.filter(s=>s.dim===i&&S.sit[s.id]&&S.sit[s.id].d>=2).map(s=>s.t);return ex.length?`<li><b>${dimTxt[i]}</b> – zum Beispiel ${esc(ex.slice(0,3).join(", "))} – brauchen Sie ${needTxt[rec.n[i]-1]}. ${st.name} bietet hier ${needTxt[st.p[i]-1]}.</li>`:""}).filter(Boolean);
+ const priceBlock=q?`<table class="price">${q.lines.map(l=>`<tr><td>${esc(l[0])}</td><td>${eur(l[1])}</td></tr>`).join("")}<tr class="tot"><td>${gkv?"Ihr voraussichtlicher Eigenanteil":"Voraussichtlicher Gesamtpreis"}</td><td>${eur(q.total)}</td></tr></table>`
+  :`<table class="price"><tr><td>${count} × Hörsystem der Stufe ${st.name}${gkv?" (Eigenanteil)":""}, ab</td><td>${eur((gkv?stageFrom(st.id).gkv:stageFrom(st.id).vk)*count)}</td></tr></table>`;
+ return `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Hörberatung ${esc(nm)} – ${FIRMA.name}</title><base href="${base}">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Asap:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+@page{size:A4;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;background:#cfd8d4;font-family:Asap,system-ui,sans-serif;color:#14332A;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.bar{position:sticky;top:0;z-index:5;display:flex;gap:10px;justify-content:center;align-items:center;padding:12px;background:#1B493B;color:#fff;font-size:15px}
+.bar button{font:inherit;font-weight:700;border:0;border-radius:99px;padding:10px 18px;background:#fff;color:#1B493B;cursor:pointer}.bar button.s{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5)}
+.page{width:210mm;height:297mm;margin:10mm auto;background:#fff;position:relative;overflow:hidden;page-break-after:always;break-after:page;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.in{padding:18mm 18mm 24mm;height:100%;display:flex;flex-direction:column;gap:5mm}
+footer{position:absolute;left:18mm;right:18mm;bottom:10mm;display:flex;justify-content:space-between;font-size:8.5pt;color:#7A918A;border-top:.3mm solid #DCE6E2;padding-top:3mm}
+.kick{font-size:9pt;letter-spacing:.14em;text-transform:uppercase;color:#5A8278;font-weight:600}
+h1{font-size:30pt;line-height:1.05;margin:0;font-weight:700}
+h2{font-size:22pt;line-height:1.1;margin:0;font-weight:700}
+h3{font-size:12.5pt;margin:0 0 2mm;font-weight:700}
+p{margin:0;font-size:11pt;line-height:1.55}
+.lead{font-size:12.5pt;line-height:1.55;color:#3C5A50}
+/* Titel */
+.cover .ph{position:absolute;inset:0 0 auto 0;height:62%;background:url(img/empfang.jpg) center 40%/cover}
+.cover .ph::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(27,73,59,0) 55%,rgba(27,73,59,.55))}
+.cover .band{position:absolute;left:0;right:0;bottom:0;height:38%;background:#1B493B;color:#fff;padding:16mm 18mm;display:flex;flex-direction:column;gap:5mm}
+.cover .band::before{content:"";position:absolute;left:0;right:0;top:-14mm;height:15mm;background:#1B493B;clip-path:path('M0 30 C 160 0 360 54 560 26 S 800 6 800 6 V60 H0Z');clip-path:polygon(0 70%,12% 45%,26% 38%,40% 48%,54% 62%,68% 58%,82% 40%,92% 30%,100% 34%,100% 100%,0 100%)}
+.cover .brand{display:flex;align-items:center;gap:4mm;font-weight:700;letter-spacing:.12em;font-size:11pt}
+.cover .brand img{width:13mm;height:13mm}
+.cover h1{font-size:34pt}
+.cover .who{font-size:15pt;color:#B7C6C2}
+.cover .meta{margin-top:auto;display:flex;justify-content:space-between;font-size:10pt;color:#B7C6C2}
+.cover .claim{font-style:italic}
+/* Willkommen */
+.two{display:grid;grid-template-columns:62mm 1fr;gap:9mm;align-items:start}
+.portrait{width:62mm;height:78mm;border-radius:5mm;background:url(img/guido.jpg) 48% 20%/240% auto;}
+.sig{margin-top:4mm}.sig b{display:block;font-size:12pt}.sig span{font-size:9.5pt;color:#587168}
+.toc{background:#EEF3F1;border-radius:5mm;padding:6mm 7mm;display:grid;grid-template-columns:1fr 1fr;gap:2mm 8mm}
+.toc div{display:flex;gap:3mm;font-size:10.5pt}.toc i{font-style:normal;font-weight:700;color:#276955;width:6mm}
+/* Hörsituation */
+.box{background:#EEF3F1;border-radius:5mm;padding:6mm 7mm}
+.aud{height:86mm}.aud svg{width:100%;height:100%;display:block}
+.deg{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
+.deg div{border-radius:4mm;padding:4mm 5mm;background:#F6F9F7;border:.3mm solid #DCE6E2}
+.deg small{display:block;font-size:9pt;color:#587168}.deg b{font-size:14pt}
+.r{color:#C0392B}.l{color:#2F5D8A}
+.legend{font-size:9pt;color:#587168;line-height:1.45}
+/* Profil */
+.dims{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
+.dims div{background:#EEF3F1;border-radius:5mm;padding:5mm}
+.dims b{display:block;font-size:11pt;margin-bottom:2mm}.dims small{display:block;font-size:9pt;color:#587168;margin-top:2mm}
+.d{display:inline-flex;gap:1.6mm}.d i{width:4mm;height:4mm;border-radius:50%;display:block}
+.sits{display:flex;flex-direction:column;gap:3mm}
+.sit{display:grid;grid-template-columns:62mm 1fr 22mm;gap:4mm;align-items:center;font-size:10.5pt}
+.track{height:3.2mm;border-radius:2mm;background:#E1E9E6;overflow:hidden}.track i{display:block;height:100%;border-radius:2mm}
+.sit small{font-size:9pt;color:#587168;text-align:right}
+.chips{display:flex;flex-wrap:wrap;gap:2.5mm}.chips span{background:#EEF3F1;border-radius:99px;padding:1.6mm 4mm;font-size:10pt}
+.goals{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3mm}
+.goals li{display:flex;gap:5mm;align-items:center;font-size:14pt;background:#F3F8F6;border-radius:5mm;padding:4mm 5mm}.goals i{font-style:normal;width:10mm;height:10mm;border-radius:50%;background:#1B493B;color:#fff;display:grid;place-items:center;font-size:10pt;font-weight:700;flex:none}
+.free{font-style:italic;color:#3C5A50;border-left:1mm solid #B7C6C2;padding-left:4mm}
+/* Empfehlung */
+.reco{background:#1B493B;color:#fff;border-radius:6mm;padding:6mm 7mm;display:grid;grid-template-columns:24mm 1fr;gap:6mm;align-items:center}
+.reco .n{width:24mm;height:24mm;border-radius:50%;background:#fff;color:#1B493B;display:grid;place-items:center;font-size:28pt;font-weight:700}
+.reco h2{font-size:28pt}.reco p{color:#D5E0DC}
+.cmp{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
+.cmp div{border:.3mm solid #DCE6E2;border-radius:5mm;padding:4mm 5mm;display:flex;flex-direction:column;gap:1.5mm}
+.cmp small{font-size:8.5pt;color:#587168}
+.why{margin:0;padding-left:5mm;display:flex;flex-direction:column;gap:1.5mm;font-size:10pt;line-height:1.45}
+.dev{display:flex;justify-content:space-between;align-items:center;border:.3mm solid #DCE6E2;border-radius:5mm;padding:4mm 6mm}
+.dev b{font-size:13pt}.dev span{font-size:9.5pt;color:#587168}
+.price{width:100%;border-collapse:collapse;font-size:10.5pt}
+.price td{padding:1.8mm 0;border-bottom:.3mm solid #E6EDEA}.price td:last-child{text-align:right;white-space:nowrap;font-weight:600}
+.price .tot td{border:0;padding-top:4mm;font-size:13pt;font-weight:700;color:#1B493B}.price .tot td:last-child{font-size:18pt}
+.fine{font-size:8.5pt;color:#7A918A;line-height:1.45}
+/* Stufen */
+.stages{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm}
+.stg{border:.4mm solid #DCE6E2;border-radius:5mm;padding:5mm;display:flex;flex-direction:column;gap:1.6mm;position:relative}
+.stg.on{border:.8mm solid #276955;background:#F3F8F6}
+.stg .tag{position:absolute;top:4mm;right:4mm;background:#276955;color:#fff;font-size:8pt;font-weight:700;border-radius:99px;padding:1mm 3mm}
+.stg .num{width:8mm;height:8mm;border-radius:50%;background:#1B493B;color:#fff;display:grid;place-items:center;font-size:9pt;font-weight:700}
+.stg b{font-size:13pt}.stg em{font-style:normal;font-size:9.5pt;color:#587168}
+.stg .rows{display:grid;grid-template-columns:auto 1fr;gap:1mm 4mm;font-size:9pt;color:#3C5A50;align-items:center;margin:1mm 0}
+.stg .from{font-size:13pt;font-weight:700;color:#276955}.stg .from small{font-size:8.5pt;font-weight:400;color:#587168}
+/* Technologien */
+.tech{display:grid;grid-template-columns:1fr 1fr;gap:4mm 7mm}
+.tech div{border-top:.6mm solid #B7C6C2;padding-top:3mm}.tech b{display:block;font-size:11pt;margin-bottom:1mm}.tech p{font-size:9.8pt;line-height:1.5;color:#3C5A50}
+/* Schritte & Kontakt */
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0}
+.steps li{display:grid;grid-template-columns:12mm 1fr;gap:5mm;padding-bottom:6mm;position:relative}
+.steps li::before{content:"";position:absolute;left:5.6mm;top:10mm;bottom:0;width:.6mm;background:#B7C6C2}.steps li:last-child::before{display:none}
+.steps i{font-style:normal;width:12mm;height:12mm;border-radius:50%;background:#276955;color:#fff;display:grid;place-items:center;font-weight:700;font-size:12pt}
+.steps b{display:block;font-size:12pt;margin-top:1mm}.steps p{font-size:10.5pt;color:#3C5A50}
+.contact{margin-top:auto;background:#1B493B;color:#fff;border-radius:6mm;padding:8mm;display:grid;grid-template-columns:1.2fr 1fr;gap:8mm}
+.contact b{font-size:13pt}.contact p{color:#D5E0DC;font-size:10.5pt}.contact .brand{display:flex;align-items:center;gap:3mm;font-weight:700;letter-spacing:.1em;font-size:10pt;margin-bottom:3mm}.contact .brand img{width:10mm;height:10mm}
+.contact table{font-size:10pt;color:#D5E0DC;border-collapse:collapse}.contact td{padding:.8mm 4mm .8mm 0;vertical-align:top}
+.notes{border:.3mm solid #DCE6E2;border-radius:5mm;padding:5mm 6mm;display:flex;flex-direction:column;gap:7mm}.notes b{font-size:11pt}.notes span{display:block;border-bottom:.3mm solid #DCE6E2;height:0}
+.wish{display:grid;grid-template-columns:1fr 1fr;gap:4mm}.wish div{background:#EEF3F1;border-radius:5mm;padding:5mm}.wish small{display:block;font-size:9pt;color:#587168;margin-bottom:1mm}.wish b{font-size:12pt}
+@media print{html,body{background:#fff}.bar{display:none}.page{margin:0;box-shadow:none}}
+</style></head><body>
+<div class="bar"><span>Broschüre für ${esc(nm)}</span><button onclick="window.print()">Drucken / als PDF speichern</button><button class="s" onclick="window.close()">Schließen</button></div>
+
+<section class="page cover"><div class="ph"></div><div class="band">
+ <div class="brand"><img src="icons/emblem.png" alt="">HÖRAKUSTIK DAUGSCH</div>
+ <h1>Ihre persönliche<br>Hörberatung</h1><div class="who">für ${esc(nm)}</div>
+ <div class="meta"><span>${date}</span><span class="claim">${FIRMA.claim}</span></div></div></section>
+
+<section class="page"><div class="in">
+ <span class="kick">Willkommen</span><h2>Schön, dass Sie da waren.</h2>
+ <div class="two"><div class="portrait" role="img" aria-label="${FIRMA.person}"></div>
+ <div style="display:flex;flex-direction:column;gap:4mm"><p class="lead">${esc(salut())},</p>
+  <p>vielen Dank für Ihr Vertrauen und das offene Gespräch. Gutes Hören bedeutet Lebensqualität: Gespräche mit Familie und Freunden, Musik, die kleinen Geräusche des Alltags.</p>
+  <p>In dieser Broschüre haben wir alles zusammengefasst, was wir gemeinsam herausgefunden haben – Ihre Hörsituation, Ihr Hörprofil im Alltag, Ihre Wünsche und Ziele – und welche Technik wir Ihnen deshalb empfehlen. So können Sie in Ruhe zu Hause alles noch einmal nachlesen.</p>
+  <p>Bei Fragen bin ich jederzeit gern für Sie da.</p>
+  <div class="sig"><b>${FIRMA.person}</b><span>${FIRMA.rolle}</span></div></div></div>
+ <div class="toc">${["Ihre Hörsituation","Ihr Hörprofil im Alltag","Ihre Wünsche & Hörziele","Unsere Empfehlung","Preisorientierung","Die sechs Technikstufen","Technik kurz erklärt","Ihre nächsten Schritte"].map((t,i)=>`<div><i>${String(i+1).padStart(2,"0")}</i>${t}</div>`).join("")}</div>
+ ${foot(2)}</div></section>
+
+<section class="page"><div class="in">
+ <span class="kick">01 · Ihre Hörsituation</span><h2>Was wir über Ihr Hören wissen</h2>
+ <div class="box" style="display:flex;flex-direction:column;gap:3mm">${friendlySituation().map(t=>`<p>${esc(t)}</p>`).join("")||"<p>–</p>"}</div>
+ <h3>Ihr Tonaudiogramm</h3>
+ <div class="aud">${audioSvg(true)}</div>
+ <div class="deg"><div><small class="r">Rechtes Ohr ○</small><b>${dR?esc(dR[0].toUpperCase()+dR.slice(1)):"–"}</b>${pta("R")!=null?`<small>mittlerer Hörverlust ${Math.round(pta("R"))} dB</small>`:""}</div><div><small class="l">Linkes Ohr ×</small><b>${dL?esc(dL[0].toUpperCase()+dL.slice(1)):"–"}</b>${pta("L")!=null?`<small>mittlerer Hörverlust ${Math.round(pta("L"))} dB</small>`:""}</div></div>
+ <p class="legend">So lesen Sie das Audiogramm: Links sind tiefe Töne, rechts hohe. Je weiter unten die Kurve liegt, desto lauter muss ein Ton sein, damit Sie ihn hören. Die grüne Fläche zeigt, wo die Laute der Sprache liegen – alles, was oberhalb Ihrer Kurve liegt, geht verloren. Besonders die hohen Töne tragen Konsonanten wie s, f oder t, die für das Verstehen wichtig sind.</p>
+ ${foot(3)}</div></section>
+
+<section class="page"><div class="in">
+ <span class="kick">02 · Ihr Hörprofil im Alltag</span><h2>Wo Ihnen das Hören schwerfällt</h2>
+ <div class="dims">${DIMS.map((d,i)=>`<div><b>${dimTxt[i]}</b>${dotsB(rec.n[i],"#B8452F")}<small>Sie brauchen ${needTxt[rec.n[i]-1]}</small></div>`).join("")}</div>
+ <div class="sits">${hard.slice(0,12).map(s=>{const r=S.sit[s.id];const col=["#E1E9E6","#E4C77A","#E59A6A","#B8452F"][r.d];return `<div class="sit"><span>${esc(s.t)}</span><span class="track"><i style="width:${r.d/3*100}%;background:${col}"></i></span><small>${DIFF[r.d]} · ${IMP[r.i??1]}</small></div>`}).join("")||"<p>Keine besonderen Schwierigkeiten angegeben.</p>"}</div>
+ ${S.frei?`<p class="free">„${esc(S.frei)}“</p>`:""}
+ ${foot(4)}</div></section>
+
+<section class="page"><div class="in">
+ <span class="kick">03 · Ihre Wünsche & Hörziele</span><h2>Was Ihnen wichtig ist</h2>
+ <div class="wish">${[["Bauform",S.bauform],["Energie",S.energie],["Smartphone",S.phone],["Budget",S.budget]].filter(x=>x[1]&&x[1]!=="noch offen").map(x=>`<div><small>${x[0]}</small><b>${esc(x[1][0].toUpperCase()+x[1].slice(1))}</b></div>`).join("")}</div>
+ ${S.wuensche.length?`<h3>Gewünschte Ausstattung</h3><div class="chips">${S.wuensche.map(w=>`<span>${esc(w)}</span>`).join("")}</div>`:""}
+ ${S.leben.length?`<h3>Ihr Alltag</h3><div class="chips">${S.leben.map(w=>`<span>${esc(w)}</span>`).join("")}</div>`:""}
+ ${goals.length?`<h3 style="margin-top:3mm">Ihre persönlichen Hörziele</h3><ol class="goals">${goals.map((g,i)=>`<li><i>${i+1}</i>${esc(g.t)}</li>`).join("")}</ol><p class="fine">Bei der Anpassung prüfen wir jedes Ziel einzeln und halten fest, wie gut es sich verbessert hat. So sehen Sie schwarz auf weiß, was Ihre Hörsysteme für Sie leisten.</p>`:""}
+ ${foot(5)}</div></section>
+
+<section class="page"><div class="in">
+ <span class="kick">04 · Unsere Empfehlung</span>
+ <div class="reco"><span class="n">${si+1}</span><div><h2>${st.name}</h2><p>${esc(st.sub)} – ideal für ${esc(st.ideal)}.</p></div></div>
+ <div class="cmp">${DIMS.map((d,i)=>`<div><b>${dimTxt[i]}</b><small>Ihr Bedarf</small>${dotsB(rec.n[i],"#B8452F")}<small>Leistung ${st.name}</small>${dotsB(st.p[i],"#276955")}</div>`).join("")}</div>
+ ${reasons.length?`<h3>Warum diese Stufe zu Ihnen passt</h3><ul class="why">${reasons.join("")}</ul>`:""}
+ ${dev?`<div class="dev"><div><span>Unser Gerätevorschlag</span><br><b>${esc(dev.m)} ${esc(dev.model)}</b></div><span>${esc(dev.form)} · ${esc(dev.power)}${count===2?" · beidseitig":""}</span></div>`:""}
+ <span class="kick" style="margin-top:2mm">05 · Preisorientierung</span>
+ <p style="font-size:10pt;color:#587168">${gkv?`Gesetzlich versichert${S.kunde.kk?" ("+esc(S.kunde.kk)+")":""}: Die Krankenkasse übernimmt einen Festbetrag je Ohr; angegeben ist Ihr Eigenanteil.`:"Privat versichert: angegeben ist der Gesamtpreis."}</p>
+ ${priceBlock}
+ <p class="fine">Unverbindliche Preisorientierung. Der endgültige Preis richtet sich nach der gewählten Versorgung und wird in einem Kostenvoranschlag festgehalten.${gkv?" Eine zuzahlungsfreie Versorgung (Stufe Basis) ist jederzeit möglich.":""}</p>
+ ${foot(6)}</div></section>
+
+<section class="page"><div class="in">
+ <span class="kick">06 · Die sechs Technikstufen</span><h2>Für jeden Anspruch die passende Technik</h2>
+ <p style="font-size:10.5pt;color:#3C5A50">Je höher die Stufe, desto besser unterstützen die Hörsysteme Sie in anspruchsvollen Situationen – und desto mehr arbeiten sie automatisch für Sie.</p>
+ <div class="stages">${STAGES.map((s,i)=>{const f=stageFrom(s.id);return `<div class="stg${i===si?" on":""}">${i===si?'<span class="tag">Unsere Empfehlung</span>':""}<span class="num">${i+1}</span><b>${s.name}</b><em>${esc(s.sub)}</em>
+  <div class="rows">${DIMS.map((d,j)=>`<span>${d}</span>${dotsB(s.p[j],"#276955")}`).join("")}<span>Automatik</span><span>${esc(s.auto)}</span></div>
+  <em>Ideal für ${esc(s.ideal)}</em><span class="from">${s.id==="basis"?"Kassenleistung":"ab "+eur(gkv?f.gkv:f.vk)} <small>${s.id==="basis"?(gkv?"zuzahlungsfrei":"je Hörsystem"):gkv?"Eigenanteil je Hörsystem":"je Hörsystem"}</small></span></div>`}).join("")}</div>
+ ${foot(7)}</div></section>
+
+<section class="page"><div class="in">
+ <span class="kick">07 · Technik kurz erklärt</span><h2>Was moderne Hörsysteme können</h2>
+ <div class="tech">${TECH.map(([t,d])=>`<div><b>${t}</b><p>${d}</p></div>`).join("")}</div>
+ <p class="fine">Welche Funktionen ein Hörsystem bietet, hängt von Hersteller, Modell und Technikstufe ab. Wir zeigen Ihnen gern den Unterschied im direkten Vergleich.</p>
+ ${foot(8)}</div></section>
+
+<section class="page"><div class="in">
+ <span class="kick">08 · Ihre nächsten Schritte</span><h2>So geht es weiter</h2>
+ <ol class="steps">${NEXT.map(([t,d],i)=>`<li><i>${i+1}</i><div><b>${t}</b><p>${d}</p></div></li>`).join("")}</ol>
+ <div class="notes"><b>Ihre Notizen</b><span></span><span></span><span></span><span></span></div>
+ <div class="contact"><div><div class="brand"><img src="icons/emblem.png" alt="">HÖRAKUSTIK DAUGSCH</div><b>${FIRMA.person}</b><p>${FIRMA.rolle}</p><p style="margin-top:3mm">${FIRMA.str}<br>${FIRMA.ort}</p></div>
+  <div><table><tr><td>Telefon</td><td>${FIRMA.tel}</td></tr><tr><td>E-Mail</td><td>${FIRMA.mail}</td></tr><tr><td>Web</td><td>${FIRMA.web}</td></tr></table>
+  <p style="margin:4mm 0 1mm;color:#fff;font-weight:700">Öffnungszeiten</p><table>${FIRMA.zeiten.map(z=>`<tr><td>${z[0]}</td><td>${z[1]}</td></tr>`).join("")}</table></div></div>
+ ${foot(9)}</div></section>
+</body></html>`;
+}
+function openBrochure(){
+ if(!name()||name()==="Neuer Kunde"){toast("Bitte zuerst den Kundennamen eintragen");return}
+ const w=window.open("","_blank");if(!w){toast("Fenster blockiert – bitte Pop-ups erlauben");return}
+ w.document.open();w.document.write(brochureHtml());w.document.close();
+}
+
 /* ---------- Ereignisse ---------- */
 const active=()=>KUNDE||(H()&&H().page()==="beratung");
 const rr=()=>{const y=window.scrollY;H().rerender();window.scrollTo(0,y)};
@@ -357,6 +582,7 @@ document.addEventListener("click",e=>{
  if(d.task){createTask(d.task,d.title,d.cat);return}
  if(d.otosame!=null){S.oto.same=d.otosame==="1";if(!S.oto.same)S.oto.L=JSON.parse(JSON.stringify(S.oto.R));changed();rr();return}
  if(d.otosend!=null){sendLab();return}
+ if(d.brochure!=null){saveNow();openBrochure();return}
  if(d.finish!=null){S.status=S.status==="abgeschlossen"?"offen":"abgeschlossen";changed();saveNow();toast(S.status==="abgeschlossen"?"Beratung abgeschlossen":"Beratung wieder geöffnet");rr();return}
  if(d.cust!=null||d.bcustwin!=null){custTab=step===6?2:0;openCustomerWindow();return}
  if(d.custclose!=null){customer=false;H().rerender();return}
