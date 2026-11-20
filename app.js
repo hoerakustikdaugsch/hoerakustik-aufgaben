@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.3 · Labor";
+const VERSION="1.4 · Beratung";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -36,7 +36,7 @@ const show=v=>["setupView","loginView","nameView","appView"].forEach(x=>$(x).cla
 
 let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
 $("ver").textContent=VERSION;
-window.HD={esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,laborActive:()=>page==="aufgaben"&&tab==="labor"};
+window.HD={esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),setTab:t=>{tab=t;render()},laborActive:()=>page==="aufgaben"&&tab==="labor"};
 
 /* ---------- Datenbank <-> App ---------- */
 const fromRow=r=>({id:r.id,title:r.title,category:r.category,assignee:r.assignee||"",due:r.due||"",priority:r.priority,status:r.status,prevStatus:r.prev_status||null,
@@ -156,7 +156,7 @@ function startPage(){
  const s=stats(),next=s.open.slice().sort(urgency).slice(0,5);
  const mod=(ic,tile,title,txt,go,dis)=>`<button class="mod" ${dis?"disabled":`data-go="${go}"`}><span class="tile ${tile}">${svg(ic)}</span><h3>${title}</h3><p>${txt}</p><span class="go">${dis?'<span class="soon">bald</span>':"Öffnen →"}</span></button>`;
  return hero()+peopleRow()+
-  `<div class="modules">${mod("list","t-kunden","Aufgaben",`${s.open.length} offen${s.od.length?" · "+s.od.length+" überfällig":""}${window.HD_LABOR&&window.HD_LABOR.openCount()?" · "+window.HD_LABOR.openCount()+" im Labor":""}`,"aufgaben")}${mod("chat","t-werkstatt","Beratung","Anamnese, Bedarfsanalyse, Empfehlung und Broschüre","",1)}${mod("euro","t-lager","Preise",window.HD_PREISE?`${window.HD_PREISE.count()} Geräte · Preisrechner`:"Geräte und Preisrechner","preise")}${mod("cal","t-verwaltung","Kalender","Termine aus AkuWin","",1)}</div>`+
+  `<div class="modules">${mod("list","t-kunden","Aufgaben",`${s.open.length} offen${s.od.length?" · "+s.od.length+" überfällig":""}${window.HD_LABOR&&window.HD_LABOR.openCount()?" · "+window.HD_LABOR.openCount()+" im Labor":""}`,"aufgaben")}${mod("chat","t-werkstatt","Beratung","Anamnese, Bedarfsanalyse, Empfehlung, Otoplastik","beratung")}${mod("euro","t-lager","Preise",window.HD_PREISE?`${window.HD_PREISE.count()} Geräte · Preisrechner`:"Geräte und Preisrechner","preise")}${mod("cal","t-verwaltung","Kalender","Termine aus AkuWin","",1)}</div>`+
   `<section class="list"><h3>Als Nächstes <small>${next.length}</small></h3>${next.length?next.map(card).join(""):emptyBox("Keine offenen Aufgaben.")}${s.open.length>5?`<button class="btn" data-go="aufgaben" style="align-self:flex-start">Alle ${s.open.length} Aufgaben ${svg("arrow")}</button>`:""}</section>`;
 }
 function tasksPage(){
@@ -191,7 +191,7 @@ function render(){
  if(person!=="alle"&&team.length&&!team.some(m=>m.id===person))person="alle";
  document.querySelectorAll("[data-go]").forEach(b=>{if(b.closest(".mainnav,.mobnav")){const g=b.dataset.go;b.setAttribute("aria-current",(g===p&&!(g==="aufgaben"&&tab==="erledigt"))||(g==="erledigt"&&p==="aufgaben"&&tab==="erledigt")?"page":"false")}});
  const focus=document.activeElement&&document.activeElement.id==="q";
- $("main").innerHTML=p==="aufgaben"?tasksPage():p==="preise"&&window.HD_PREISE?window.HD_PREISE.render():startPage();
+ $("main").innerHTML=p==="aufgaben"?tasksPage():p==="preise"&&window.HD_PREISE?window.HD_PREISE.render():p==="beratung"&&window.HD_BERATUNG?window.HD_BERATUNG.render():startPage();
  if(focus){const i=$("q");i.focus();i.setSelectionRange(i.value.length,i.value.length)}
  $("meLine").textContent="Angemeldet als "+(nameOf(me.id)||me.email);
 }
@@ -304,7 +304,8 @@ $("setupForm").addEventListener("submit",e=>{e.preventDefault();const u=$("s_url
  if(!/^https:\/\/.+/.test(u)){$("setupErr").textContent="Die URL muss mit https:// beginnen.";return}
  ls.set("cfg",{u,k});start(u,k)});
 const C=window.HD_CONFIG||{},saved=ls.get("cfg",null);
-if(C.SUPABASE_URL&&C.SUPABASE_KEY)start(C.SUPABASE_URL,C.SUPABASE_KEY);
+if(location.hash==="#kunde"){}
+else if(C.SUPABASE_URL&&C.SUPABASE_KEY)start(C.SUPABASE_URL,C.SUPABASE_KEY);
 else if(saved)start(saved.u,saved.k);
 else show("setupView");
 })();
