@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.2 · Preistool";
+const VERSION="1.3 · Labor";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -36,7 +36,7 @@ const show=v=>["setupView","loginView","nameView","appView"].forEach(x=>$(x).cla
 
 let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
 $("ver").textContent=VERSION;
-window.HD={esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me}};
+window.HD={esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,laborActive:()=>page==="aufgaben"&&tab==="labor"};
 
 /* ---------- Datenbank <-> App ---------- */
 const fromRow=r=>({id:r.id,title:r.title,category:r.category,assignee:r.assignee||"",due:r.due||"",priority:r.priority,status:r.status,prevStatus:r.prev_status||null,
@@ -156,7 +156,7 @@ function startPage(){
  const s=stats(),next=s.open.slice().sort(urgency).slice(0,5);
  const mod=(ic,tile,title,txt,go,dis)=>`<button class="mod" ${dis?"disabled":`data-go="${go}"`}><span class="tile ${tile}">${svg(ic)}</span><h3>${title}</h3><p>${txt}</p><span class="go">${dis?'<span class="soon">bald</span>':"Öffnen →"}</span></button>`;
  return hero()+peopleRow()+
-  `<div class="modules">${mod("list","t-kunden","Aufgaben",`${s.open.length} offen${s.od.length?" · "+s.od.length+" überfällig":""}`,"aufgaben")}${mod("chat","t-werkstatt","Beratung","Anamnese, Bedarfsanalyse, Empfehlung und Broschüre","",1)}${mod("euro","t-lager","Preise",window.HD_PREISE?`${window.HD_PREISE.count()} Geräte · Preisrechner`:"Geräte und Preisrechner","preise")}${mod("cal","t-verwaltung","Kalender","Termine aus AkuWin","",1)}</div>`+
+  `<div class="modules">${mod("list","t-kunden","Aufgaben",`${s.open.length} offen${s.od.length?" · "+s.od.length+" überfällig":""}${window.HD_LABOR&&window.HD_LABOR.openCount()?" · "+window.HD_LABOR.openCount()+" im Labor":""}`,"aufgaben")}${mod("chat","t-werkstatt","Beratung","Anamnese, Bedarfsanalyse, Empfehlung und Broschüre","",1)}${mod("euro","t-lager","Preise",window.HD_PREISE?`${window.HD_PREISE.count()} Geräte · Preisrechner`:"Geräte und Preisrechner","preise")}${mod("cal","t-verwaltung","Kalender","Termine aus AkuWin","",1)}</div>`+
   `<section class="list"><h3>Als Nächstes <small>${next.length}</small></h3>${next.length?next.map(card).join(""):emptyBox("Keine offenen Aufgaben.")}${s.open.length>5?`<button class="btn" data-go="aufgaben" style="align-self:flex-start">Alle ${s.open.length} Aufgaben ${svg("arrow")}</button>`:""}</section>`;
 }
 function tasksPage(){
@@ -175,9 +175,11 @@ function tasksPage(){
  const waits=open.filter(t=>t.status==="wartet"&&match(t,false)).sort(urgency);
  const aside=`<aside class="aside"><h3>Wartet auf Rückmeldung</h3>${waits.length?waits.slice(0,6).map(t=>`<button class="w" data-open="${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc([t.customer,t.manufacturer].filter(Boolean).join(" · ")||t.category)}${t.due?" · nachfassen "+esc(relDate(t.due)):""}</small></button>`).join(""):'<span class="note">Gerade wartet nichts auf Hersteller oder Krankenkasse.</span>'}
   <span class="note" style="margin-top:6px;display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${live?"#9BE3C4":"#FFB4A3"}"></span>${live?"Live synchron mit allen Geräten":"Nicht verbunden"}</span></aside>`;
+ if(tab==="labor"&&window.HD_LABOR)return `<div class="bar"><h2>Aufgaben</h2>
+   <div class="tabs" role="group" aria-label="Ansicht"><button data-tab="tag" aria-pressed="false">Tagesübersicht</button><button data-tab="alle" aria-pressed="false">Alle offenen</button><button data-tab="labor" aria-pressed="true">Labor</button><button data-tab="erledigt" aria-pressed="false">Erledigt</button></div></div>`+window.HD_LABOR.render();
  const offline=!navigator.onLine?(()=>{const c=ls.get("cache",null);return `<div class="hint">Keine Internetverbindung – Stand von ${c?new Date(c.at).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"vorhin"} Uhr.</div>`})():"";
  return `<div class="bar"><h2>Aufgaben</h2>
-   <div class="tabs" role="group" aria-label="Ansicht"><button data-tab="tag" aria-pressed="${tab==="tag"}">Tagesübersicht</button><button data-tab="alle" aria-pressed="${tab==="alle"}">Alle offenen</button><button data-tab="erledigt" aria-pressed="${tab==="erledigt"}">Erledigt</button></div>
+   <div class="tabs" role="group" aria-label="Ansicht"><button data-tab="tag" aria-pressed="${tab==="tag"}">Tagesübersicht</button><button data-tab="alle" aria-pressed="${tab==="alle"}">Alle offenen</button><button data-tab="labor" aria-pressed="${tab==="labor"}">Labor${window.HD_LABOR&&window.HD_LABOR.openCount()?` <span class="cnt">${window.HD_LABOR.openCount()}</span>`:""}</button><button data-tab="erledigt" aria-pressed="${tab==="erledigt"}">Erledigt</button></div>
    <label class="search">${svg("search")}<input id="q" type="search" placeholder="Kunde, Gerät, Notiz suchen …" aria-label="Suchen" value="${esc(q)}"></label></div>`+
   peopleRow()+
   `<div class="chips"><button class="chip" data-cat="" aria-pressed="${!cat}">Alle Kategorien</button>${CATS.map(([g])=>`<button class="chip" data-cat="${esc(g)}" aria-pressed="${cat===g}">${esc(g)}</button>`).join("")}<select id="catSel" aria-label="Einzelne Kategorie"><option value="">Genauer …</option>${CATS.map(([g,cs])=>`<optgroup label="${esc(g)}">${cs.map(c=>`<option ${cat===c?"selected":""}>${esc(c)}</option>`).join("")}</optgroup>`).join("")}</select></div>`+
@@ -290,7 +292,7 @@ async function onSession(session){
  if(!error&&!data){show("nameView");$("n_name").focus();return}
  enterApp();
 }
-function enterApp(){show("appView");render();loadAll();subscribe();window.HD_PREISE&&window.HD_PREISE.load();clearInterval(timer);timer=setInterval(render,60000)}
+function enterApp(){show("appView");render();loadAll();subscribe();window.HD_PREISE&&window.HD_PREISE.load();window.HD_LABOR&&window.HD_LABOR.load();clearInterval(timer);timer=setInterval(render,60000)}
 
 function start(url,key){
  if(!window.supabase||!window.supabase.createClient){show("setupView");$("setupErr").textContent="Die Datenbank-Bibliothek konnte nicht geladen werden. Bitte Internetverbindung prüfen und neu laden.";return}
