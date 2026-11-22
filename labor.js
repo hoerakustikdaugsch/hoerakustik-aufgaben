@@ -45,11 +45,24 @@ async function save(row,msg){
  if(msg)H().toast(msg);return true;
 }
 const meName=()=>{const me=H().me;return(H().team().find(t=>t.id===me?.id)?.name)||me?.email||""};
-function advance(o,dir=1){
- const stage=Math.max(0,Math.min(6,o.stage+dir));if(stage===o.stage)return;
- const history=[...(o.history||[]),{step:dir>0?stage:o.stage,dir,at:new Date().toISOString(),by:meName()}];
- save({...o,stage,history},dir>0?(stage===6?"Fertig – bereit zur Anpassung":`${STEPS[stage-1].t} erledigt`):"Schritt zurückgenommen");
+function advance(o,dir=1){moveTo(o,o.stage+dir)}
+function moveTo(o,target){
+ const stage=Math.max(0,Math.min(6,target));if(stage===o.stage)return;
+ const history=[...(o.history||[])],at=new Date().toISOString(),by=meName();
+ if(stage>o.stage)for(let i=o.stage+1;i<=stage;i++)history.push({step:i,dir:1,at,by});
+ else for(let i=o.stage;i>stage;i--)history.push({step:i,dir:-1,at,by});
+ st.arrived=o.id;clearTimeout(st.arrT);st.arrT=setTimeout(()=>{st.arrived=null},1200);
+ const col=COLS.find(c=>c.stages.includes(stage));
+ save({...o,stage,history},stage<o.stage?"Zurück nach „"+col.t+"“":stage===6?"Fertig – bereit zur Anpassung":"Weiter nach „"+col.t+"“");
 }
+/* Board-Spalten: welche Stufen gehören dazu, wohin geht es mit „erledigt“ */
+const COLS=[
+ {k:"neu",t:"Reinigen & Beschneiden",sub:"Neu eingegangen",stages:[0,1],to:2,btn:"Gereinigt & beschnitten"},
+ {k:"scan",t:"Scannen",stages:[2],to:3,btn:"Gescannt"},
+ {k:"model",t:"Modeling",stages:[3],to:4,btn:"Modeling fertig"},
+ {k:"druck",t:"3D-Druck",stages:[4],to:5,btn:"Gedruckt"},
+ {k:"finish",t:"Finishing",stages:[5],to:6,btn:"Finishing fertig"},
+ {k:"fertig",t:"Fertig",sub:"bereit zur Anpassung",stages:[6],to:null,btn:"An Kunden übergeben"}];
 
 /* ---------- Zusammenfassung der Spezifikation ---------- */
 function earSpec(o,side){const s=o.spec||{};return s.same!==false?s.R||{}:s[side]||{}}
@@ -60,34 +73,31 @@ const sideChips=o=>(o.sides==="beide"?["R","L"]:[o.sides==="rechts"?"R":"L"]).ma
 function track(o){
  return `<ol class="ltrack">${STEPS.map((s,i)=>{const cls=i<o.stage?"done":i===o.stage?"now":"";return `<li class="${cls}"><span class="ldot">${i<o.stage?"✓":i+1}</span><small>${s.t}</small></li>`}).join("")}</ol>`;
 }
-function card(o){
+function kcard(o,c){
  const n=daysTo(o.due),late=n!=null&&n<0&&o.stage<6,soon=n!=null&&n<=1&&o.stage<6;
- const next=o.stage<6?STEPS[o.stage]:null;
- return `<article class="lcard${late?" late":""}${o.urgent?" urgent":""}" data-l-open="${esc(o.id)}">
-  <div class="lhead"><div><b class="lname">${esc(o.customer)}</b><div class="meta">${sideChips(o)}${o.urgent?'<span class="tag hot">Eilig</span>':""}<span>${esc(summary(o)||"Spezifikation offen")}</span></div></div>
-   <div class="ldue ${late?"late":soon?"soon":""}">${o.due?esc(dueLabel(o.due)):"kein Termin"}</div></div>
-  ${track(o)}
-  <div class="lfoot"><span class="muted">${o.stage===6?"Alle Schritte erledigt":next?`Als Nächstes: <b>${esc(next.l)}</b>`:""}</span>
-   ${o.stage<6?`<button class="btn primary sm" data-l-next="${esc(o.id)}">✓ ${esc(next.t)} erledigt</button>`:`<button class="btn sm" data-l-deliver="${esc(o.id)}">An Kunden übergeben</button>`}</div>
+ const step=o.stage===1?"Gereinigt – Beschneiden offen":"";
+ return `<article class="lk${late?" late":""}${o.urgent?" urgent":""}${st.arrived===o.id?" arrive":""}" data-l-open="${esc(o.id)}" draggable="true" data-l-drag="${esc(o.id)}">
+  <div class="lkt"><b>${esc(o.customer)}</b>${o.urgent?'<span class="tag hot">Eilig</span>':""}</div>
+  <div class="lkm">${sideChips(o)}<span class="lks">${esc(summary(o)||"Spezifikation offen")}</span></div>
+  ${step?`<div class="lkstep">${step}</div>`:""}
+  <div class="lkf"><span class="ldue ${late?"late":soon?"soon":""}">${o.due?esc(dueLabel(o.due)):"kein Termin"}</span>
+   ${c.to!=null?`<button class="lkb" data-l-to="${esc(o.id)}" data-stage="${c.to}" title="${esc(c.btn)}">✓ ${esc(c.btn)}</button>`:`<button class="lkb" data-l-deliver="${esc(o.id)}">Übergeben</button>`}</div>
  </article>`;
 }
 function render(){
  if(!st.loaded){if(!st.loading&&H().sb)setTimeout(load,0);return `<div class="empty"><p>Labor wird geladen …</p></div>`}
  if(st.missing)return `<div class="empty"><p><b>Die Labor-Tabelle ist noch nicht eingerichtet.</b><br>Bitte <code>sql/003_labor.sql</code> einmal in Supabase ausführen.</p></div>`;
  const open=st.orders.filter(o=>!o.delivered_at);
- const counts=[0,1,2,3,4,5,6].map(i=>open.filter(o=>o.stage===i).length);
- const fl=st.filter===""?open:open.filter(o=>String(o.stage)===st.filter);
  const byDue=(a,b)=>(b.urgent-a.urgent)||((a.due||"9")>(b.due||"9")?1:-1);
- const inWork=fl.filter(o=>o.stage>0&&o.stage<6).sort(byDue),fresh=fl.filter(o=>o.stage===0).sort(byDue),done=fl.filter(o=>o.stage===6).sort(byDue);
  const late=open.filter(o=>o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length;
- const strip=`<div class="lstrip">${[["","Alle offen",open.length],...STEPS.map((s,i)=>[String(i),s.t,counts[i]]),["6","Fertig",counts[6]]].map(([k,l,c],idx)=>`<button data-l-filter="${k}" aria-pressed="${st.filter===k}"><b>${c}</b><small>${l}</small></button>`).join("")}</div>`;
- const sec=(t,list,cls="")=>list.length?`<section class="list ${cls}"><h3>${t} <small>${list.length}</small></h3>${list.map(card).join("")}</section>`:"";
  const archive=st.orders.filter(o=>o.delivered_at).sort((a,b)=>b.delivered_at.localeCompare(a.delivered_at)).slice(0,30);
- return `<div class="lbar"><div><b>Otoplastik-Labor</b><span class="muted">${open.length} offen${late?` · <em class="hotx">${late} überfällig</em>`:""}</span></div><button class="btn primary" data-l-new>+ Laborauftrag</button></div>`+strip+
-  (fl.length?sec("Neu eingegangen – Abformung liegt bereit",fresh)+sec("In Fertigung",inWork)+sec("Fertig – bereit zur Anpassung",done,"ready"):
-   `<div class="empty"><p>${open.length?"Keine Aufträge in diesem Schritt.":"Keine offenen Laboraufträge. Aufträge entstehen in der Beratung oder über „+ Laborauftrag“."}</p></div>`)+
+ const board=`<div class="lboard">${COLS.map((c,i)=>{const list=open.filter(o=>c.stages.includes(o.stage)).sort(byDue);
+  return `<section class="lcol c-${c.k}" data-l-col="${c.stages[0]}"><header><span class="lcn">${i+1}</span><div><b>${c.t}</b>${c.sub?`<small>${c.sub}</small>`:""}</div><em>${list.length}</em></header>
+   <div class="lcards">${list.length?list.map(o=>kcard(o,c)).join(""):`<div class="lkempty">${i===0?"Keine neuen Abformungen":"Leer"}</div>`}</div></section>`}).join("")}</div>`;
+ return `<div class="lbar"><div><b>Otoplastik-Labor</b><span class="muted">${open.length} offen${late?` · <em class="hotx">${late} überfällig</em>`:""}<span class="lhint"> · Karte antippen für Details, am PC auch per Ziehen verschieben</span></span></div><button class="btn primary" data-l-new>+ Laborauftrag</button></div>`+
+  (open.length?board:`<div class="empty"><p>Keine offenen Laboraufträge. Aufträge entstehen in der Beratung oder über „+ Laborauftrag“.</p></div>`)+
   `<button class="linkbtn" data-l-archive>${st.archive?"Übergebene ausblenden":"Übergebene Aufträge anzeigen ("+archive.length+")"}</button>`+
-  (st.archive&&archive.length?`<section class="list"><h3>Übergeben</h3>${archive.map(o=>`<article class="lcard done" data-l-open="${esc(o.id)}"><div class="lhead"><div><b class="lname">${esc(o.customer)}</b><div class="meta">${sideChips(o)}<span>${esc(summary(o))}</span></div></div><div class="ldue">übergeben ${esc(when(o.delivered_at))}</div></div></article>`).join("")}</section>`:"");
+  (st.archive&&archive.length?`<div class="larch">${archive.map(o=>`<article class="lk done" data-l-open="${esc(o.id)}"><div class="lkt"><b>${esc(o.customer)}</b></div><div class="lkm">${sideChips(o)}<span class="lks">${esc(summary(o))}</span></div><div class="lkf"><span class="ldue">übergeben ${esc(when(o.delivered_at))}</span></div></article>`).join("")}</div>`:"");
 }
 
 /* ---------- Formular (Auftrag anlegen / bearbeiten) ---------- */
@@ -168,16 +178,23 @@ function openDetail(id){
  const dlg=document.getElementById("labDetail");if(!dlg.open)dlg.showModal();
 }
 
+/* ---------- Ziehen & Ablegen (PC) ---------- */
+document.addEventListener("dragstart",e=>{const c=e.target.closest&&e.target.closest("[data-l-drag]");if(!c||!H().laborActive())return;st.drag=c.dataset.lDrag;e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",st.drag);setTimeout(()=>c.classList.add("dragging"),0)});
+document.addEventListener("dragend",()=>{st.drag=null;document.querySelectorAll(".lk.dragging,.lcol.over").forEach(x=>x.classList.remove("dragging","over"))});
+document.addEventListener("dragover",e=>{if(!st.drag)return;const col=e.target.closest&&e.target.closest("[data-l-col]");if(!col)return;e.preventDefault();document.querySelectorAll(".lcol.over").forEach(x=>x!==col&&x.classList.remove("over"));col.classList.add("over")});
+document.addEventListener("drop",e=>{if(!st.drag)return;const col=e.target.closest&&e.target.closest("[data-l-col]");if(!col)return;e.preventDefault();const o=st.orders.find(x=>x.id===st.drag);const target=Number(col.dataset.lCol);
+ col.classList.remove("over");if(o&&!COLS.find(c=>c.stages.includes(o.stage)).stages.includes(target))moveTo(o,target);st.drag=null});
+
 /* ---------- Ereignisse in der Übersicht ---------- */
 document.addEventListener("click",e=>{
  if(!H()||!H().laborActive())return;const el=e.target;if(el.closest("dialog"))return;
- const n=el.closest("[data-l-next]");if(n){e.stopPropagation();const o=st.orders.find(x=>x.id===n.dataset.lNext);if(o)advance(o,1);return}
+ const to=el.closest("[data-l-to]");if(to){e.stopPropagation();const o=st.orders.find(x=>x.id===to.dataset.lTo);if(!o)return;const card=to.closest(".lk");
+  const go=()=>moveTo(o,Number(to.dataset.stage));if(card&&!matchMedia("(prefers-reduced-motion: reduce)").matches){card.style.height=card.offsetHeight+"px";card.classList.add("leaving");requestAnimationFrame(()=>card.classList.add("go"));setTimeout(go,340)}else go();return}
  const dv=el.closest("[data-l-deliver]");if(dv){const o=st.orders.find(x=>x.id===dv.dataset.lDeliver);if(o)save({...o,delivered_at:new Date().toISOString()},"Als übergeben markiert");return}
- const f=el.closest("[data-l-filter]");if(f){st.filter=st.filter===f.dataset.lFilter?"":f.dataset.lFilter;H().rerender();return}
  if(el.closest("[data-l-new]")){openForm();return}
  if(el.closest("[data-l-archive]")){st.archive=!st.archive;H().rerender();return}
  const o=el.closest("[data-l-open]");if(o){openDetail(o.dataset.lOpen);return}
 },true);
 
-window.HD_LABOR={render,load,openForm,STEPS,OPT,state:st,openCount:()=>st.orders.filter(o=>!o.delivered_at).length,lateCount:()=>st.orders.filter(o=>!o.delivered_at&&o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length};
+window.HD_LABOR={render,load,openForm,STEPS,COLS,OPT,state:st,openCount:()=>st.orders.filter(o=>!o.delivered_at).length,lateCount:()=>st.orders.filter(o=>!o.delivered_at&&o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length};
 })();
