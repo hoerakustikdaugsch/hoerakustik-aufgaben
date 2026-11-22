@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.5.2 · Vollbild";
+const VERSION="1.6.0 · Erledigt-Spalte & Labor";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -36,7 +36,7 @@ const show=v=>["setupView","loginView","nameView","appView"].forEach(x=>$(x).cla
 
 let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
 $("ver").textContent=VERSION;
-window.HD={esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),setTab:t=>{tab=t;render()},laborActive:()=>page==="aufgaben"&&tab==="labor"};
+window.HD={esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),setTab:t=>{if(t==="labor"){go("labor");return}tab=t;render()},laborActive:()=>page==="labor"};
 
 /* ---------- Datenbank <-> App ---------- */
 const fromRow=r=>({id:r.id,title:r.title,category:r.category,assignee:r.assignee||"",due:r.due||"",priority:r.priority,status:r.status,prevStatus:r.prev_status||null,
@@ -138,7 +138,7 @@ function card(t){
  const tel=t.phone?`<a href="tel:${esc(t.phone.replace(/[^\d+]/g,""))}" data-stop>${esc(t.phone)}</a>`:"";
  const dl=t.status==="erledigt"&&t.doneAt?"erledigt "+new Date(t.doneAt).toLocaleDateString("de-DE",{day:"numeric",month:"short"}):relDate(t.due);
  const av=t.assignee&&initials(t.assignee)?`<span class="who" title="${esc(nameOf(t.assignee))}">${esc(initials(t.assignee))}</span>`:"";
- return `<article class="task${t.priority==="hoch"||late?" urgent":""}${t.status==="erledigt"?" done":""}" data-id="${esc(t.id)}">
+ return `<article class="task${t.priority==="hoch"||late?" urgent":""}${t.status==="erledigt"?" done":""}${t.id===arrived?" arrive":""}" data-id="${esc(t.id)}">
   <span class="tile ${tile}">${svg(ic)}</span>
   <div class="body"><span class="title">${esc(t.title)}</span>
    <div class="meta"><span>${esc(t.category||"Sonstiges")}</span>${t.priority==="hoch"&&t.status!=="erledigt"?'<span class="tag hot">Dringend</span>':""}${st}${t.customer?`<span>${esc(t.customer)}</span>`:""}${tel}${device?`<span>${esc(device)}</span>`:""}</div>
@@ -154,14 +154,14 @@ const emptyBox=txt=>`<div class="empty"><svg viewBox="0 0 120 50" width="120" he
 /* ---------- Seiten ---------- */
 function startPage(){
  const s=stats(),next=s.open.slice().sort(urgency).slice(0,5);
- const mod=(ic,tile,title,txt,go,dis)=>`<button class="mod" ${dis?"disabled":`data-go="${go}"`}><span class="tile ${tile}">${svg(ic)}</span><h3>${title}</h3><p>${txt}</p><span class="go">${dis?'<span class="soon">bald</span>':"Öffnen →"}</span></button>`;
  return hero()+peopleRow()+
-  `<div class="modules">${mod("list","t-kunden","Aufgaben",`${s.open.length} offen${s.od.length?" · "+s.od.length+" überfällig":""}${window.HD_LABOR&&window.HD_LABOR.openCount()?" · "+window.HD_LABOR.openCount()+" im Labor":""}`,"aufgaben")}${mod("chat","t-werkstatt","Beratung","Anamnese, Bedarfsanalyse, Empfehlung, Otoplastik","beratung")}${mod("euro","t-lager","Preise",window.HD_PREISE?`${window.HD_PREISE.count()} Geräte · Preisrechner`:"Geräte und Preisrechner","preise")}${mod("cal","t-verwaltung","Kalender","Termine aus AkuWin","",1)}</div>`+
   `<section class="list"><h3>Als Nächstes <small>${next.length}</small></h3>${next.length?next.map(card).join(""):emptyBox("Keine offenen Aufgaben.")}${s.open.length>5?`<button class="btn" data-go="aufgaben" style="align-self:flex-start">Alle ${s.open.length} Aufgaben ${svg("arrow")}</button>`:""}</section>`;
 }
 function tasksPage(){
+ if(tab==="labor")tab="tag";
  const T=iso(new Date()),TM=addDays(1),now=new Date(),SUN=addDays(6-(now.getDay()+6)%7);
  const open=tasks.filter(t=>t.status!=="erledigt"),mine=open.filter(t=>match(t));
+ const doneAll=tasks.filter(t=>t.status==="erledigt"&&match(t)).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
  let h="";
  if(tab==="tag"){
   const od=mine.filter(t=>t.due&&t.due<T),td=mine.filter(t=>t.due===T);
@@ -169,29 +169,30 @@ function tasksPage(){
   h=sec("Überfällig",od,"overdue")+sec("Heute",td)+sec("Morgen",nw.filter(t=>t.due===TM))+sec("Diese Woche",nw.filter(t=>t.due>TM&&t.due<=SUN))+
    sec("Später",nw.filter(t=>t.due>SUN&&t.due>TM))+sec("Ohne Datum",nw.filter(t=>!t.due))+sec("Wartet auf Rückmeldung",rest.filter(t=>t.status==="wartet"));
  }else if(tab==="alle")h=sec("Alle offenen Aufgaben",mine.slice());
- else{const d=tasks.filter(t=>t.status==="erledigt"&&match(t)).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,100);
-  h=d.length?`<section class="list"><h3>Zuletzt erledigt <small>${d.length}</small></h3>${d.map(card).join("")}</section>`:""}
+ else{const d=doneAll.slice(0,150);h=d.length?`<section class="list"><h3>Verlauf – zuletzt erledigt <small>${d.length}</small></h3>${d.map(card).join("")}</section>`:""}
  if(!h)h=emptyBox(!loaded&&!tasks.length?"Aufgaben werden geladen …":tab==="erledigt"?"Noch nichts erledigt.":q||cat||person!=="alle"?"Keine Aufgaben für diesen Filter.":"Keine offenen Aufgaben. Mit „+“ legst du die erste an.");
- const waits=open.filter(t=>t.status==="wartet"&&match(t,false)).sort(urgency);
- const aside=`<aside class="aside"><h3>Wartet auf Rückmeldung</h3>${waits.length?waits.slice(0,6).map(t=>`<button class="w" data-open="${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc([t.customer,t.manufacturer].filter(Boolean).join(" · ")||t.category)}${t.due?" · nachfassen "+esc(relDate(t.due)):""}</small></button>`).join(""):'<span class="note">Gerade wartet nichts auf Hersteller oder Krankenkasse.</span>'}
-  <span class="note" style="margin-top:6px;display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${live?"#9BE3C4":"#FFB4A3"}"></span>${live?"Live synchron mit allen Geräten":"Nicht verbunden"}</span></aside>`;
- if(tab==="labor"&&window.HD_LABOR)return `<div class="bar"><h2>Aufgaben</h2>
-   <div class="tabs" role="group" aria-label="Ansicht"><button data-tab="tag" aria-pressed="false">Tagesübersicht</button><button data-tab="alle" aria-pressed="false">Alle offenen</button><button data-tab="labor" aria-pressed="true">Labor</button><button data-tab="erledigt" aria-pressed="false">Erledigt</button></div></div>`+window.HD_LABOR.render();
  const offline=!navigator.onLine?(()=>{const c=ls.get("cache",null);return `<div class="hint">Keine Internetverbindung – Stand von ${c?new Date(c.at).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"vorhin"} Uhr.</div>`})():"";
+ const today=doneAll.filter(t=>isToday(t.doneAt));
+ const st=stats(),left=st.od.length+st.td.length;
+ const doneCol=`<aside class="donecol"><div class="dhead"><h3>Heute erledigt <small>${today.length}</small></h3>${left===0&&today.length?'<span class="yay">Tagesziel erreicht 🎉</span>':left?`<span class="dleft">noch ${left} für heute</span>`:""}</div>
+  ${today.length?today.map(card).join(""):`<div class="dempty">${svg("check")}<p>Erledigte Aufgaben landen hier.<br>Einfach links abhaken.</p></div>`}
+  ${doneAll.length>today.length?`<button class="linkbtn" data-tab="erledigt">Ganzer Verlauf (${doneAll.length}) ${svg("arrow")}</button>`:""}</aside>`;
  return `<div class="bar"><h2>Aufgaben</h2>
-   <div class="tabs" role="group" aria-label="Ansicht"><button data-tab="tag" aria-pressed="${tab==="tag"}">Tagesübersicht</button><button data-tab="alle" aria-pressed="${tab==="alle"}">Alle offenen</button><button data-tab="labor" aria-pressed="${tab==="labor"}">Labor${window.HD_LABOR&&window.HD_LABOR.openCount()?` <span class="cnt">${window.HD_LABOR.openCount()}</span>`:""}</button><button data-tab="erledigt" aria-pressed="${tab==="erledigt"}">Erledigt</button></div>
+   <div class="tabs" role="group" aria-label="Ansicht"><button data-tab="tag" aria-pressed="${tab==="tag"}">Tagesübersicht</button><button data-tab="alle" aria-pressed="${tab==="alle"}">Alle offenen</button><button data-tab="erledigt" aria-pressed="${tab==="erledigt"}">Verlauf</button></div>
    <label class="search">${svg("search")}<input id="q" type="search" placeholder="Kunde, Gerät, Notiz suchen …" aria-label="Suchen" value="${esc(q)}"></label></div>`+
   peopleRow()+
   `<div class="chips"><button class="chip" data-cat="" aria-pressed="${!cat}">Alle Kategorien</button>${CATS.map(([g])=>`<button class="chip" data-cat="${esc(g)}" aria-pressed="${cat===g}">${esc(g)}</button>`).join("")}<select id="catSel" aria-label="Einzelne Kategorie"><option value="">Genauer …</option>${CATS.map(([g,cs])=>`<optgroup label="${esc(g)}">${cs.map(c=>`<option ${cat===c?"selected":""}>${esc(c)}</option>`).join("")}</optgroup>`).join("")}</select></div>`+
-  offline+`<div class="grid2"><div>${h}</div>${aside}</div>`;
+  offline+(tab==="erledigt"?`<div>${h}</div>`:`<div class="board"><div class="opencol">${h}</div>${doneCol}</div>`);
 }
+function laborPage(){return window.HD_LABOR?window.HD_LABOR.render():emptyBox("Labor wird geladen …")}
 function render(){
  if(!me)return;
  const p=page==="erledigt"?"aufgaben":page;
  if(person!=="alle"&&team.length&&!team.some(m=>m.id===person))person="alle";
  document.querySelectorAll("[data-go]").forEach(b=>{if(b.closest(".mainnav,.mobnav")){const g=b.dataset.go;b.setAttribute("aria-current",(g===p&&!(g==="aufgaben"&&tab==="erledigt"))||(g==="erledigt"&&p==="aufgaben"&&tab==="erledigt")?"page":"false")}});
  const focus=document.activeElement&&document.activeElement.id==="q";
- $("main").innerHTML=p==="aufgaben"?tasksPage():p==="preise"&&window.HD_PREISE?window.HD_PREISE.render():p==="beratung"&&window.HD_BERATUNG?window.HD_BERATUNG.render():startPage();
+ const ln=window.HD_LABOR?window.HD_LABOR.openCount():0;document.querySelectorAll(".labcnt").forEach(x=>{x.textContent=ln||"";x.hidden=!ln});
+ $("main").innerHTML=p==="aufgaben"?tasksPage():p==="labor"?laborPage():p==="preise"&&window.HD_PREISE?window.HD_PREISE.render():p==="beratung"&&window.HD_BERATUNG?window.HD_BERATUNG.render():startPage();
  if(focus){const i=$("q");i.focus();i.setSelectionRange(i.value.length,i.value.length)}
  $("meLine").textContent="Angemeldet als "+(nameOf(me.id)||me.email);
 }
@@ -235,6 +236,24 @@ $("delBtn").onclick=async()=>{const b=$("delBtn");if(!b.dataset.sure){b.dataset.
 let tt;function toast(msg,undo){$("toastMsg").textContent=msg;$("toastUndo").style.display=undo?"":"none";$("toastUndo").onclick=()=>{undo&&undo();$("toast").style.display="none"};
  $("toast").style.display="flex";clearTimeout(tt);tt=setTimeout(()=>$("toast").style.display="none",undo?6000:2200)}
 
+/* ---------- Animation & Konfetti ---------- */
+let arrived=null,arrT;
+const reduced=()=>window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+function confetti(undo){
+ if(reduced()){toast("Alles für heute erledigt – stark! 🎉",undo);return}
+ const c=document.createElement("canvas");c.className="confetti";document.body.appendChild(c);
+ const x=c.getContext("2d"),dpr=window.devicePixelRatio||1,W=innerWidth,H=innerHeight;c.width=W*dpr;c.height=H*dpr;x.scale(dpr,dpr);
+ const COL=["#276955","#1B493B","#8BAAA2","#E9C46A","#F4A261","#E5989B","#B7C6C2","#ffffff"];
+ const P=[];for(let i=0;i<220;i++){const left=i%2===0;P.push({x:left?-10:W+10,y:H*(.55+Math.random()*.3),vx:(left?1:-1)*(6+Math.random()*9),vy:-(10+Math.random()*12),r:4+Math.random()*6,rot:Math.random()*6,vr:(Math.random()-.5)*.4,c:COL[i%COL.length],s:Math.random()<.5})}
+ for(let i=0;i<90;i++)P.push({x:Math.random()*W,y:-20-Math.random()*H*.5,vx:(Math.random()-.5)*2,vy:2+Math.random()*3,r:4+Math.random()*5,rot:Math.random()*6,vr:(Math.random()-.5)*.3,c:COL[i%COL.length],s:Math.random()<.5});
+ const t0=performance.now();
+ (function f(now){const el=now-t0;x.clearRect(0,0,W,H);x.globalAlpha=el>2600?Math.max(0,1-(el-2600)/900):1;
+  for(const p of P){p.vy+=.32;p.vx*=.985;p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;x.save();x.translate(p.x,p.y);x.rotate(p.rot);x.fillStyle=p.c;
+   if(p.s)x.fillRect(-p.r/2,-p.r/4,p.r,p.r/2);else{x.beginPath();x.arc(0,0,p.r/2.4,0,7);x.fill()}x.restore()}
+  if(el<3500)requestAnimationFrame(f);else c.remove()})(t0);
+ toast("Alles für heute erledigt – stark! 🎉",undo);
+}
+
 /* ---------- Klicks ---------- */
 document.addEventListener("click",e=>{
  const el=e.target;if(!me||el.closest("[data-stop]")||el.closest("dialog"))return;
@@ -248,7 +267,13 @@ document.addEventListener("click",e=>{
  if(el.closest("[data-check]")){
   const before={...t},done=t.status!=="erledigt";
   const nt={...t,status:done?"erledigt":(t.prevStatus||"offen"),prevStatus:done?t.status:null,doneAt:done?Date.now():null};
-  save(nt,before).then(ok=>ok&&toast(done?"Erledigt":"Wieder geöffnet",()=>save(before,nt)));return}
+  const T=iso(new Date()),wasToday=done&&t.due&&t.due<=T,s0=stats();
+  const commit=()=>{arrived=t.id;clearTimeout(arrT);arrT=setTimeout(()=>{arrived=null},1200);
+   save(nt,before).then(ok=>{if(!ok)return;toast(done?"Erledigt":"Wieder geöffnet",()=>save(before,nt));
+    if(wasToday&&s0.od.length+s0.td.length>0){const s1=stats();if(s1.od.length+s1.td.length===0)confetti(()=>save(before,nt))}})};
+  if(reduced()){commit();return}
+  art.classList.add(done?"leaving":"leaving back");art.style.height=art.offsetHeight+"px";
+  requestAnimationFrame(()=>art.classList.add("go"));setTimeout(commit,380);return}
  openForm(t);
 });
 document.addEventListener("change",e=>{if(e.target.id==="catSel"){cat=e.target.value;ls.set("cat",cat);render()}});
