@@ -26,11 +26,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:3px solid var(--mist);outline-offset:2px}
 .hidden{display:none!important}
-.wrap{max-width:1240px;margin:0 auto;padding:0 max(3.5vw,16px)}
+.wrap{max-width:none;margin:0;padding:0 clamp(16px,2.6vw,56px)}
 svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
 
 /* Kopf */
-.top{padding:max(20px,env(safe-area-inset-top)) 0 0}
+.top{padding:max(20px,env(safe-area-inset-top)) 0 6px}
 .top .wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:.08em;font-size:15px;color:var(--deep);text-decoration:none;white-space:nowrap}
 .brand .logo{height:42px;width:auto;display:block}
@@ -99,7 +99,7 @@ main{padding:28px 0 40px;display:flex;flex-direction:column;gap:22px}
 .chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 0}
 .chip{flex:none;border:1px solid var(--line);background:transparent;border-radius:99px;padding:6px 14px;min-height:38px;font-size:15px;color:#3C5A50}
 .chip[aria-pressed=true]{background:var(--card);border-color:var(--card);color:var(--ink);font-weight:600}
-.chips select{flex:none;border:1px solid var(--line);background:transparent;border-radius:99px;padding:6px 12px;min-height:38px;font-size:15px;color:#3C5A50}
+.chips select{flex:none;width:auto;border:1px solid var(--line);background:transparent;border-radius:99px;padding:6px 12px;min-height:38px;font-size:15px;color:#3C5A50}
 .grid2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:24px;align-items:start}
 section.list{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
 section.list h3{margin:6px 0 2px;font-size:19px;display:flex;align-items:baseline;gap:8px}
@@ -161,6 +161,7 @@ footer .wrap{display:flex;gap:4px 16px;flex-wrap:wrap;align-items:center;justify
 footer button{background:none;border:0;color:var(--forest);font-weight:600;font-size:13px;padding:8px;text-decoration:underline}
 .mobnav{display:none}
 
+@media(min-width:1700px){.hero h1{font-size:48px}.modules{gap:20px}}
 @media(max-width:1200px){.topright .sync{display:none}}
 @media(max-width:900px){
  .modules{grid-template-columns:repeat(2,minmax(0,1fr))}
