@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.6.1 · Labor-Board";
+const VERSION="1.6.2 · Auto-Update";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -292,7 +292,17 @@ $("teamForm").addEventListener("submit",async e=>{e.preventDefault();const n=$("
 let installEvt=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;$("installBtn").classList.remove("hidden")});
 $("installBtn").onclick=async()=>{if(!installEvt)return;installEvt.prompt();await installEvt.userChoice;installEvt=null;$("installBtn").classList.add("hidden")};
-if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+if("serviceWorker" in navigator&&location.protocol.startsWith("http")){
+ /* Updates: beim Öffnen und beim Zurückkehren in die App nach neuer Version schauen und automatisch neu laden */
+ navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
+  const check=()=>reg.update().catch(()=>{});setInterval(check,5*60000);
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")check()});
+ }).catch(()=>{});
+ let reloading=false,hadCtrl=!!navigator.serviceWorker.controller;
+ navigator.serviceWorker.addEventListener("controllerchange",()=>{if(!hadCtrl){hadCtrl=true;return}if(reloading)return;reloading=true;
+  const busy=document.querySelector("dialog[open]")||(window.HD_BERATUNG&&page==="beratung");
+  if(busy){toast("Neue Version verfügbar – App bitte einmal neu öffnen");return}location.reload()});
+}
 
 /* ---------- Anmeldung ---------- */
 $("loginForm").addEventListener("submit",async e=>{
