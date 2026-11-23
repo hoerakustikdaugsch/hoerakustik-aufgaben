@@ -97,17 +97,24 @@ const dots=(n,on="var(--forest)")=>`<span class="dots">${[1,2,3,4,5].map(i=>`<i 
 function audioPair(big=false,print=false){
  const one=e=>{const d=degree(pta(e));return `<figure class="audone ${e}"><figcaption><span class="ear ${e}">${e==="R"?"Rechtes Ohr ○":"Linkes Ohr ×"}</span><b>${d?esc(d):"–"}</b>${pta(e)!=null?`<small>Ø ${Math.round(pta(e))} dB</small>`:""}</figcaption>${audioSvg(big,e,print)}</figure>`};
  const bc=S.audioBC&&["R","L"].some(e=>Object.keys(S.audioBC[e]||{}).length);
- return `<div class="audpair">${one("R")}${one("L")}</div>${bc?`<p class="audleg"><span>━ Luftleitung</span><span>┅ Knochenleitung</span></p>`:""}`;
+ return `<div class="audpair">${one("R")}${one("L")}</div><p class="audleg"><span><i class="sw"></i>Sprachbereich</span>${bc?`<span>━ Luftleitung</span><span>┅ Knochenleitung</span>`:""}</p>`;
 }
 function audioSvg(big=false,ear=null,print=false){
- const W=ear?420:560,H=big?(ear?330:380):(ear?300:320),l=44,r=16,t=20,b=30,x=i=>l+i*(W-l-r)/(FREQ.length-1),y=db=>t+(db+10)/130*(H-t-b);
+ const W=ear?470:600,H=big?(ear?330:380):(ear?300:320),l=44,r=ear?84:96,t=20,b=30,x=i=>l+i*(W-l-r)/(FREQ.length-1),y=db=>t+(db+10)/130*(H-t-b);
  const zones=[[-10,25,"#EEF6F2","normal"],[25,40,"#F3F6EC","leicht"],[40,60,"#FBF4E6","mittel"],[60,80,"#FBEDE6","hochgradig"],[80,120,"#F8E6E6","an Taubheit grenzend"]];
  let s=`<svg viewBox="0 0 ${W} ${H}" class="audsvg" role="img" aria-label="Tonaudiogramm">`;
- zones.forEach(([a,c,col,lb])=>{s+=`<rect x="${l}" y="${y(a)}" width="${W-l-r}" height="${y(c)-y(a)}" fill="${col}"/><text x="${W-r-6}" y="${y(a)+14}" text-anchor="end" font-size="11" fill="#7A918A">${lb}</text>`});
- // Sprachbereich
- s+=`<path d="M${x(1)} ${y(22)} Q${x(3)} ${y(18)} ${x(5)} ${y(28)} L${x(5)} ${y(55)} Q${x(3)} ${y(62)} ${x(1)} ${y(50)}Z" fill="#276955" opacity=".10"/><text x="${x(3)}" y="${y(48)}" font-size="12" fill="#276955" opacity=".8" text-anchor="middle">Sprachbereich</text>`;
+ zones.forEach(([a,c,col])=>{s+=`<rect x="${l}" y="${y(a)}" width="${W-l-r}" height="${y(c)-y(a)}" fill="${col}"/>`});
+ // Sprachbereich (Fläche)
+ s+=`<path d="M${x(1)} ${y(22)} Q${x(3)} ${y(18)} ${x(5)} ${y(28)} L${x(5)} ${y(55)} Q${x(3)} ${y(62)} ${x(1)} ${y(50)}Z" fill="#276955" opacity=".10"/>`;
+ // Raster
  for(let d=0;d<=120;d+=20)s+=`<line x1="${l}" x2="${W-r}" y1="${y(d)}" y2="${y(d)}" stroke="#DCE6E2"/><text x="${l-8}" y="${y(d)+4}" text-anchor="end" font-size="11" fill="#587168">${d}</text>`;
  FREQ.forEach((f,i)=>s+=`<line x1="${x(i)}" x2="${x(i)}" y1="${t}" y2="${H-b}" stroke="#E7EEEB"/><text x="${x(i)}" y="${H-10}" text-anchor="middle" font-size="11" fill="#587168">${f>=1000?f/1000+"k":f}</text>`);
+ // Beschriftungen über dem Raster, mit weißem Rand gut lesbar
+ const halo='paint-order="stroke" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"';
+ // Grad-Beschriftung rechts neben dem Raster (mittig je Zone, lange Begriffe zweizeilig)
+ zones.forEach(([a,c,col,lb])=>{const m=(y(Math.max(a,-10))+y(Math.min(c,120)))/2,w=lb.split(" ");const lines=w.length>2?[w.slice(0,2).join(" "),w.slice(2).join(" ")]:[lb];
+  s+=`<rect x="${W-r+4}" y="${y(a)+1}" width="4" height="${y(c)-y(a)-2}" rx="2" fill="${col}" stroke="#C9D8D2" stroke-width=".6"/>`;
+  s+=`<text x="${W-r+12}" y="${m+4-(lines.length-1)*6}" font-size="11" font-weight="600" fill="#5E7A71">${lines.map((t2,i)=>`<tspan x="${W-r+12}" dy="${i?12:0}">${t2}</tspan>`).join("")}</text>`});
  [["R","#C0392B"],["L","#2F5D8A"]].filter(([e])=>!ear||e===ear).forEach(([e,c])=>{
   const bc=S.audioBC&&S.audioBC[e]?FREQ.map((f,i)=>[i,S.audioBC[e][f]]).filter(p=>p[1]!=null&&!isNaN(Number(p[1]))).map(p=>[p[0],Number(p[1])]):[];
   if(ear&&bc.length){if(bc.length>1)s+=`<polyline points="${bc.map(p=>x(p[0])+","+y(p[1])).join(" ")}" fill="none" stroke="${c}" stroke-width="1.8" stroke-dasharray="5 4" opacity=".8"/>`;
@@ -168,18 +175,21 @@ function stepKunde(){
  card("Versorgung",`<div class="q"><span class="ql">Art</span>${chips("kunde.versorgung",["erst","Folgeversorgung"]).replace(">erst<",">Erstversorgung<")}</div>
 `);
 }
+/* Frage mit Auswahl + Freitext "Sonstiges" (falls nichts passt) */
+const qs=(label,p,opts,multi=false)=>`<div class="q"><span class="ql">${label}</span><div class="qwrap">${chips(p,opts,multi)}<input class="sonst" data-in="${p}Sonst" value="${esc(get(p+"Sonst")||"")}" placeholder="Sonstiges …" aria-label="${esc(label)} – Sonstiges"></div></div>`;
 function stepAnamnese(){
  const a="an";
  const f=flags();
  return (f.length?`<div class="flag"><b>Ärztliche Abklärung empfehlen</b><span>${f.map(esc).join(" · ")}</span><small>Nur für dich sichtbar – erscheint nicht in der Kundenansicht oder Broschüre.</small></div>`:"")+
- card("Hörverlust",`<div class="q"><span class="ql">Seit wann?</span>${chips(a+".seit",["weniger als 3 Monate","unter 1 Jahr","1–3 Jahre","3–5 Jahre","5–10 Jahre","über 10 Jahre"])}</div>
-  <div class="q"><span class="ql">Verlauf</span>${chips(a+".verlauf",["schleichend","plötzlich","schwankend"])}</div>
-  <div class="q"><span class="ql">Seite</span>${chips(a+".seite",["beidseitig","einseitig rechts","einseitig links"])}</div>
-  <div class="q"><span class="ql">Wer hat es bemerkt?</span>${chips(a+".bemerkt",["selbst","Angehörige","Arzt / Hörtest"])}</div>`)+
- card("Ereignisse am Ohr",yn(a+".hoersturz","Hörsturz",`<div class="q"><span class="ql">Wann?</span>${chips(a+".hsWann",["in den letzten 3 Monaten","vor 3–12 Monaten","länger her"])}</div><div class="q"><span class="ql">Seite</span>${chips(a+".hsSeite",["rechts","links","beidseitig"])}</div>`)+
-  yn(a+".laerm","Lärm- oder Knalltrauma, Lärmbelastung",`<div class="q"><span class="ql">Art</span>${chips(a+".laermArt",["Knalltrauma","beruflich","Jagd / Schießsport","Musik / Konzerte","Maschinen / Werkzeug"],true)}</div>`)+
-  `<div class="q"><span class="ql">Entzündungen & Befunde</span>${chips(a+".entz",["Mittelohrentzündung akut","Mittelohrentzündung chronisch","Gehörgangsentzündung","Trommelfellperforation","Cholesteatom","Otosklerose"],true)}</div>
-  <div class="q"><span class="ql">Operationen am Ohr</span>${chips(a+".ops",["Paukenröhrchen","Tympanoplastik","Stapesplastik","Mastoidektomie","Cochlea-Implantat","BAHA"],true)}</div>`)+
+ card("Hörverlust",qs("Seit wann?",a+".seit",["weniger als 3 Monate","unter 1 Jahr","1–3 Jahre","3–5 Jahre","5–10 Jahre","über 10 Jahre"])+
+  qs("Verlauf",a+".verlauf",["schleichend","plötzlich","schwankend"])+
+  qs("Seite",a+".seite",["beidseitig","einseitig rechts","einseitig links"])+
+  qs("Wer hat es bemerkt?",a+".bemerkt",["selbst","Angehörige","Arzt / Hörtest"]))+
+ card("Ereignisse am Ohr",yn(a+".hoersturz","Hörsturz",qs("Wann?",a+".hsWann",["in den letzten 3 Monaten","vor 3–12 Monaten","länger her"])+qs("Seite",a+".hsSeite",["rechts","links","beidseitig"]))+
+  yn(a+".laerm","Lärm- oder Knalltrauma, Lärmbelastung",qs("Art",a+".laermArt",["Knalltrauma","beruflich","Jagd / Schießsport","Musik / Konzerte","Maschinen / Werkzeug"],true))+
+  qs("Entzündungen & Befunde",a+".entz",["Mittelohrentzündung akut","Mittelohrentzündung chronisch","Gehörgangsentzündung","Trommelfellperforation","Cholesteatom","Otosklerose"],true)+
+  qs("Operationen am Ohr",a+".ops",["Paukenröhrchen","Tympanoplastik","Stapesplastik","Mastoidektomie","Cochlea-Implantat","BAHA"],true)+
+  `<div class="form">${inp(a+".ereignisSonst","Sonstige Ereignisse am Ohr","text","z. B. Unfall, Barotrauma, Fremdkörper","full")}</div>`)+
  card("Begleitsymptome",yn(a+".tinn","Tinnitus / Ohrgeräusch",`<div class="q"><span class="ql">Seite</span>${chips(a+".tinnSeite",["rechts","links","beidseitig","im Kopf"])}</div><div class="q"><span class="ql">Klang</span>${chips(a+".tinnArt",["Pfeifen","Rauschen","Brummen","Pulsieren"])}</div>
    <label class="range">Belastung: <b>${S.an.tinnBel}</b> von 10<input type="range" min="0" max="10" data-in="an.tinnBel" data-num value="${S.an.tinnBel}"></label>`)+
   yn(a+".schwindel","Schwindel / Gleichgewichtsstörungen")+yn(a+".druck","Druckgefühl im Ohr")+yn(a+".hyper","Geräuschempfindlichkeit")+yn(a+".schmerz","Ohrenschmerzen")+yn(a+".ausfluss","Ausfluss aus dem Ohr")+yn(a+".puls","Pulsierendes Ohrgeräusch"))+
@@ -477,7 +487,7 @@ p{margin:0;font-size:11pt;line-height:1.55}
 .box{background:#EEF3F1;border-radius:5mm;padding:6mm 7mm}
 .aud{height:86mm}.aud svg{width:100%;height:100%;display:block}
 .aud2 .audpair{display:grid;grid-template-columns:1fr 1fr;gap:5mm}.aud2 figure{margin:0}.aud2 figcaption{display:flex;align-items:baseline;gap:3mm;margin-bottom:1.5mm;font-size:9.5pt}
-.aud2 figcaption .ear{font-weight:700}.aud2 .ear.R{color:#C0392B}.aud2 .ear.L{color:#2F5D8A}.aud2 figcaption small{color:#6B7F78}.aud2 svg{width:100%;height:auto;display:block}.aud2 .audleg{font-size:8.5pt;color:#6B7F78;display:flex;gap:6mm;margin:1mm 0 0}
+.aud2 figcaption .ear{font-weight:700}.aud2 .ear.R{color:#C0392B}.aud2 .ear.L{color:#2F5D8A}.aud2 figcaption small{color:#6B7F78}.aud2 svg{width:100%;height:auto;display:block}.aud2 .audleg{font-size:8.5pt;color:#6B7F78;display:flex;gap:6mm;margin:1mm 0 0}.aud2 .audleg .sw{display:inline-block;width:4mm;height:2.6mm;background:rgba(39,105,85,.16);border-radius:1mm;margin-right:1.5mm;vertical-align:-.3mm}
 .deg{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
 .deg div{border-radius:4mm;padding:4mm 5mm;background:#F6F9F7;border:.3mm solid #DCE6E2}
 .deg small{display:block;font-size:9pt;color:#587168}.deg b{font-size:14pt}
