@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.6.3 · Einladung & Passwort";
+const VERSION="1.7.0 · Löschen & Labor-Aufgaben";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -36,21 +36,23 @@ const show=v=>["setupView","loginView","pwView","nameView","appView"].forEach(x=
 
 let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
 $("ver").textContent=VERSION;
-window.HD={esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),setTab:t=>{if(t==="labor"){go("labor");return}tab=t;render()},laborActive:()=>page==="labor"};
+window.HD={get tasks(){return tasks},saveTask:(t,b)=>save(t,b),esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),ask:(title,text,ok="Löschen")=>new Promise(res=>{const d=$("askDlg");$("askTitle").textContent=title;$("askText").textContent=text||"";$("askYes").textContent=ok;d.returnValue="";d.onclose=()=>res(d.returnValue==="yes");d.showModal();setTimeout(()=>$("askNo").focus(),30)}),
+ setTab:t=>{if(t==="labor"){go("labor");return}tab=t;render()},laborActive:()=>page==="labor"};
 
 /* ---------- Datenbank <-> App ---------- */
 const fromRow=r=>({id:r.id,title:r.title,category:r.category,assignee:r.assignee||"",due:r.due||"",priority:r.priority,status:r.status,prevStatus:r.prev_status||null,
  customer:r.customer||"",phone:r.phone||"",manufacturer:r.manufacturer||"",model:r.model||"",notes:r.notes||"",
- createdAt:r.created_at?Date.parse(r.created_at):0,doneAt:r.done_at?Date.parse(r.done_at):null});
+ createdAt:r.created_at?Date.parse(r.created_at):0,doneAt:r.done_at?Date.parse(r.done_at):null,labOrderId:r.lab_order_id||null,consultationId:r.consultation_id||null});
 const toRow=t=>({id:t.id,title:t.title,category:t.category||"Sonstiges",assignee:t.assignee||null,due:t.due||null,priority:t.priority||"normal",status:t.status||"offen",
  prev_status:t.prevStatus||null,customer:t.customer||null,phone:t.phone||null,manufacturer:t.manufacturer||null,model:t.model||null,notes:t.notes||null,
- created_at:new Date(t.createdAt||Date.now()).toISOString(),updated_at:new Date().toISOString(),done_at:t.doneAt?new Date(t.doneAt).toISOString():null});
+ created_at:new Date(t.createdAt||Date.now()).toISOString(),updated_at:new Date().toISOString(),done_at:t.doneAt?new Date(t.doneAt).toISOString():null,...(t.labOrderId?{lab_order_id:t.labOrderId}:{}),...(t.consultationId?{consultation_id:t.consultationId}:{})});
 const putLocal=t=>{const i=tasks.findIndex(x=>x.id===t.id);i<0?tasks.push(t):tasks[i]=t};
 const cache=()=>ls.set("cache",{tasks,team,at:Date.now()});
 
 async function save(t,before){
  putLocal(t);render();
- const{error}=await sb.from("tasks").upsert(toRow(t));
+ let{error}=await sb.from("tasks").upsert(toRow(t));
+ if(error&&/lab_order_id|consultation_id/.test(error.message||"")){const r=toRow(t);delete r.lab_order_id;delete r.consultation_id;({error}=await sb.from("tasks").upsert(r))}
  if(error){before?putLocal(before):(tasks=tasks.filter(x=>x.id!==t.id));render();toast("Nicht gespeichert – keine Verbindung?");return false}
  cache();return true;
 }
@@ -137,11 +139,13 @@ function card(t){
  const device=[t.manufacturer,t.model].filter(Boolean).join(" ");
  const tel=t.phone?`<a href="tel:${esc(t.phone.replace(/[^\d+]/g,""))}" data-stop>${esc(t.phone)}</a>`:"";
  const dl=t.status==="erledigt"&&t.doneAt?"erledigt "+new Date(t.doneAt).toLocaleDateString("de-DE",{day:"numeric",month:"short"}):relDate(t.due);
+ const lo=t.labOrderId&&window.HD_LABOR?window.HD_LABOR.state.orders.find(o=>o.id===t.labOrderId):null;
+ const labTag=lo?`<span class="tag lab">Labor: ${esc(lo.delivered_at?"übergeben":(window.HD_LABOR.COLS.find(c=>c.stages.includes(lo.stage))||{}).t||"")}</span>`:"";
  const av=t.assignee&&initials(t.assignee)?`<span class="who" title="${esc(nameOf(t.assignee))}">${esc(initials(t.assignee))}</span>`:"";
  return `<article class="task${t.priority==="hoch"||late?" urgent":""}${t.status==="erledigt"?" done":""}${t.id===arrived?" arrive":""}" data-id="${esc(t.id)}">
   <span class="tile ${tile}">${svg(ic)}</span>
   <div class="body"><span class="title">${esc(t.title)}</span>
-   <div class="meta"><span>${esc(t.category||"Sonstiges")}</span>${t.priority==="hoch"&&t.status!=="erledigt"?'<span class="tag hot">Dringend</span>':""}${st}${t.customer?`<span>${esc(t.customer)}</span>`:""}${tel}${device?`<span>${esc(device)}</span>`:""}</div>
+   <div class="meta"><span>${esc(t.category||"Sonstiges")}</span>${t.priority==="hoch"&&t.status!=="erledigt"?'<span class="tag hot">Dringend</span>':""}${st}${labTag}${t.customer?`<span>${esc(t.customer)}</span>`:""}${tel}${device?`<span>${esc(device)}</span>`:""}</div>
    ${t.notes?`<div class="meta">${esc(t.notes.length>120?t.notes.slice(0,120)+"…":t.notes)}</div>`:""}
    <div class="meta mside">${dl?`<span class="${late?"late":""}" style="${late?"color:var(--hot);font-weight:700":""}">${esc(dl)}</span>`:""}${t.assignee?`<span>${esc(firstName(t.assignee))}</span>`:""}</div></div>
   <div class="side">${dl?`<span class="${late?"late":""}">${esc(dl)}</span>`:""}${av}</div>

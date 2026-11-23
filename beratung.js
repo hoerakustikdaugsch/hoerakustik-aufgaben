@@ -233,7 +233,8 @@ function stepOto(){
   ${both?`<div class="q"><span class="ql">Ausführung</span><div class="chips"><button type="button" class="chip" data-otosame="1" aria-pressed="${o.same}">Beide Seiten gleich</button><button type="button" class="chip" data-otosame="0" aria-pressed="${!o.same}">Seiten unterschiedlich</button></div></div>`:""}
   ${two?`<div class="ears2"><div><h4 class="ear R">Rechts</h4>${earOto("R")}</div><div><h4 class="ear L">Links</h4>${earOto("L")}</div></div>`:earOto(o.sides==="links"?"L":"R")}
   <div class="form">${ta("oto.notes","Hinweise fürs Labor","z. B. Kunde wünscht diskrete Farbe")}</div>
-  <div class="nav2"><span class="muted">Der Auftrag erscheint mit Kundenname im Labor-Reiter und durchläuft dort: ${LSTEPS.join(" → ")}.</span><button class="btn primary" data-otosend>Auftrag ans Labor senden</button></div>`);
+  <div class="q"><span class="ql">Wer übernimmt?</span>${window.HD_LABOR?window.HD_LABOR.whoChips(o.assignee===undefined?H().me?.id:o.assignee,"data-otowho"):""}</div>
+  <div class="nav2"><span class="muted">Der Auftrag erscheint im Labor (${LSTEPS.join(" → ")}) und als Aufgabe bei der gewählten Person.</span><button class="btn primary" data-otosend>Auftrag ans Labor senden</button></div>`);
 }
 /* ---------- Kundenansicht ---------- */
 function customerView(){
@@ -275,6 +276,13 @@ async function openConsultation(id){
  S=Object.assign(empty(),r.data.data||{});S.kunde=Object.assign(empty().kunde,S.kunde||{});S.an=Object.assign(empty().an,S.an||{});S.oto=Object.assign(empty().oto,S.oto||{});
  cid=id;mode="edit";step=0;customer=false;H().rerender();window.scrollTo(0,0);
 }
+async function delConsultation(id){
+ const x=(list||[]).find(c=>c.id===id),n=x&&x.customer_name||"ohne Namen";
+ if(!await H().ask("Beratung löschen?",`Die Beratung „${n}“ wird endgültig gelöscht und lässt sich nicht wiederherstellen. Aufgaben und Laboraufträge daraus bleiben erhalten.`))return;
+ const{error}=await H().sb.from("consultations").delete().eq("id",id);
+ if(error){toast("Löschen fehlgeschlagen: "+error.message);return}
+ list=list.filter(c=>c.id!==id);H().rerender();toast("Beratung gelöscht");
+}
 function newConsultation(){S=empty();cid=uid();mode="edit";step=0;customer=false;dirty=false;H().rerender();window.scrollTo(0,0)}
 
 /* ---------- Aufgaben & Labor ---------- */
@@ -291,10 +299,12 @@ async function sendLab(){
  const o=S.oto;if(!name()||name()==="Neuer Kunde"){toast("Bitte zuerst den Kundennamen eintragen");step=0;H().rerender();return}
  const same=o.sides!=="beide"||o.same,spec={same,R:o.sides==="links"&&same?o.L&&o.L.form?o.L:o.R:o.R,L:same?o.R:o.L,abformung:o.abformung};
  const me=H().team().find(t=>t.id===H().me?.id)?.name||"";
- const lab={id:uid(),customer:name(),phone:S.kunde.tel||null,consultation_id:cid,sides:o.sides||"beide",spec,stage:0,history:[{step:0,dir:0,at:new Date().toISOString(),by:me}],due:o.due||null,urgent:false,notes:o.notes||null};
- const{error}=await H().sb.from("lab_orders").insert(lab);
+ const lab={id:uid(),assignee:(o.assignee===undefined?H().me?.id:o.assignee)||null,customer:name(),phone:S.kunde.tel||null,consultation_id:cid,sides:o.sides||"beide",spec,stage:0,history:[{step:0,dir:0,at:new Date().toISOString(),by:me}],due:o.due||null,urgent:false,notes:o.notes||null};
+ let{error}=await H().sb.from("lab_orders").insert(lab);
+ if(error&&/assignee/.test(error.message||"")){const l={...lab};delete l.assignee;({error}=await H().sb.from("lab_orders").insert(l))}
  if(error){toast("Laborauftrag nicht gesendet: "+error.message);return}
- o.sent=true;o.labId=lab.id;toast("Auftrag ist im Labor");changed();H().rerender();window.HD_LABOR&&window.HD_LABOR.load();
+ window.HD_LABOR&&window.HD_LABOR.syncTask(lab);
+ o.sent=true;o.labId=lab.id;toast(lab.assignee?"Auftrag ist im Labor – Aufgabe angelegt":"Auftrag ist im Labor");changed();H().rerender();window.HD_LABOR&&window.HD_LABOR.load();
 }
 
 /* ---------- Kundenfenster ---------- */
@@ -314,7 +324,7 @@ function listView(){
  const f=list.filter(x=>!q||(x.customer_name||"").toLowerCase().includes(q.toLowerCase()));
  return `<div class="bar"><h2>Beratung</h2><label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="bq" type="search" placeholder="Kunde suchen …" value="${esc(q)}" aria-label="Beratung suchen"></label><button class="btn primary" data-bnew>+ Neue Beratung</button></div>
  ${f.length?`<section class="list">${f.map(x=>`<article class="task" data-bopen="${esc(x.id)}"><span class="tile t-werkstatt"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>
-  <div class="body"><span class="title">${esc(x.customer_name||"Ohne Namen")}</span><div class="meta"><span>${new Date(x.updated_at||x.created_at).toLocaleDateString("de-DE",{day:"numeric",month:"short",year:"numeric"})}</span>${x.customer_phone?`<span>${esc(x.customer_phone)}</span>`:""}<span class="tag work">${esc(STAGE_NAME(x.stage_final))}</span>${x.status==="abgeschlossen"?'<span class="tag">abgeschlossen</span>':'<span class="tag wait">offen</span>'}</div></div></article>`).join("")}</section>`
+  <div class="body"><span class="title">${esc(x.customer_name||"Ohne Namen")}</span><div class="meta"><span>${new Date(x.updated_at||x.created_at).toLocaleDateString("de-DE",{day:"numeric",month:"short",year:"numeric"})}</span>${x.customer_phone?`<span>${esc(x.customer_phone)}</span>`:""}<span class="tag work">${esc(STAGE_NAME(x.stage_final))}</span>${x.status==="abgeschlossen"?'<span class="tag">abgeschlossen</span>':'<span class="tag wait">offen</span>'}</div></div><button class="delx" data-bdel="${esc(x.id)}" aria-label="Beratung ${esc(x.customer_name||"")} löschen" title="Beratung löschen">×</button></article>`).join("")}</section>`
   :`<div class="empty"><p>${list.length?"Keine Beratung gefunden.":"Noch keine Beratungen. Mit „+ Neue Beratung“ startest du die erste."}</p></div>`}`;
 }
 function editView(){
@@ -564,6 +574,7 @@ document.addEventListener("click",e=>{
  const b=el.closest("button,article[data-bopen]");if(!b)return;const d=b.dataset;
  if(KUNDE){if(d.ctab!=null){custTab=Number(d.ctab);renderKunde()}return}
  if(d.bnew!=null){newConsultation();return}
+ if(d.bdel){delConsultation(d.bdel);return}
  if(d.bopen){openConsultation(d.bopen);return}
  if(d.blist!=null){saveNow();mode="list";customer=false;listLoaded=false;H().rerender();return}
  if(d.goto){saveNow();if(d.goto==="labor"){H().go("aufgaben");H().setTab("labor")}else H().go(d.goto);return}
@@ -580,6 +591,7 @@ document.addEventListener("click",e=>{
  if(d.otos!=null){S.otos=Number(d.otos);changed();rr();return}
  if(d.task){createTask(d.task,d.title,d.cat);return}
  if(d.otosame!=null){S.oto.same=d.otosame==="1";if(!S.oto.same)S.oto.L=JSON.parse(JSON.stringify(S.oto.R));changed();rr();return}
+ if(d.otowho!=null){const cur=S.oto.assignee===undefined?H().me?.id:S.oto.assignee;S.oto.assignee=cur===d.otowho?null:d.otowho;changed();rr();return}
  if(d.otosend!=null){sendLab();return}
  if(d.brochure!=null){saveNow();openBrochure();return}
  if(d.finish!=null){S.status=S.status==="abgeschlossen"?"offen":"abgeschlossen";changed();saveNow();toast(S.status==="abgeschlossen"?"Beratung abgeschlossen":"Beratung wieder geöffnet");rr();return}

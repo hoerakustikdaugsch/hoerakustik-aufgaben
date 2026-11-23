@@ -40,9 +40,33 @@ async function load(){
 }
 async function save(row,msg){
  const i=st.orders.findIndex(o=>o.id===row.id);i<0?st.orders.unshift(row):st.orders[i]={...st.orders[i],...row};H().rerender();
- const{error}=await H().sb.from("lab_orders").upsert({...row,updated_at:new Date().toISOString()});
+ let{error}=await H().sb.from("lab_orders").upsert({...row,updated_at:new Date().toISOString()});
+ if(error&&/assignee/.test(error.message||"")){const r={...row,updated_at:new Date().toISOString()};delete r.assignee;({error}=await H().sb.from("lab_orders").upsert(r))}
  if(error){H().toast("Nicht gespeichert: "+error.message);load();return false}
+ syncTask(st.orders.find(o=>o.id===row.id)||row);
  if(msg)H().toast(msg);return true;
+}
+/* ---------- Aufgabe zum Laborauftrag ---------- */
+const whoChips=(cur,attr)=>{const team=H().team()||[];return team.length?`<div class="whochips">${team.map(m=>`<button type="button" class="chip" ${attr}="${esc(m.id)}" aria-pressed="${cur===m.id}">${esc(m.name)}${m.id===H().me?.id?" (ich)":""}</button>`).join("")}</div>`:'<span class="muted">Noch kein Team angelegt.</span>'};
+const whoName=id=>(H().team()||[]).find(m=>m.id===id)?.name||"";
+const whoIni=id=>whoName(id).split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+const sidesTxt=o=>o.sides==="beide"?"beidseitig":o.sides==="links"?"links":"rechts";
+function taskDue(o){if(o.due){const d=new Date(o.due+"T12:00");d.setDate(d.getDate()-1);const t=new Date();t.setHours(12,0,0,0);return iso(d<t?t:d)}const d=new Date();d.setDate(d.getDate()+3);return iso(d)}
+/* legt die Aufgabe an bzw. hält sie aktuell: Zuständig, Termin, Status (fertig → erledigt) */
+async function syncTask(o){
+ if(!o||!o.id||!H().saveTask)return;
+ const all=H().tasks||[],ex=all.find(t=>t.labOrderId===o.id);
+ const finished=!!o.delivered_at||o.stage>=6;
+ if(!ex){if(finished||!o.assignee)return;
+  const t={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),title:"Otoplastik fertigen ("+sidesTxt(o)+")",category:"Otoplastik",assignee:o.assignee,due:taskDue(o),
+   priority:o.urgent?"hoch":"normal",status:"offen",customer:o.customer,phone:o.phone||"",notes:[summary(o),o.notes].filter(Boolean).join(" · "),labOrderId:o.id,consultationId:o.consultation_id||null,createdAt:Date.now()};
+  await H().saveTask(t,null);return}
+ const nt={...ex,customer:o.customer,phone:o.phone||ex.phone,priority:o.urgent?"hoch":ex.priority==="hoch"?"normal":ex.priority,due:taskDue(o)};
+ if(o.assignee!==undefined)nt.assignee=o.assignee||"";
+ if(finished&&ex.status!=="erledigt"){nt.status="erledigt";nt.prevStatus=ex.status;nt.doneAt=Date.now()}
+ if(!finished&&ex.status==="erledigt"){nt.status=ex.prevStatus||"offen";nt.prevStatus=null;nt.doneAt=null}
+ const same=["customer","phone","priority","due","assignee","status"].every(k=>(nt[k]||"")===(ex[k]||""));
+ if(!same)await H().saveTask(nt,ex);
 }
 const meName=()=>{const me=H().me;return(H().team().find(t=>t.id===me?.id)?.name)||me?.email||""};
 function advance(o,dir=1){moveTo(o,o.stage+dir)}
@@ -77,7 +101,7 @@ function kcard(o,c){
  const n=daysTo(o.due),late=n!=null&&n<0&&o.stage<6,soon=n!=null&&n<=1&&o.stage<6;
  const step=o.stage===1?"Gereinigt – Beschneiden offen":"";
  return `<article class="lk${late?" late":""}${o.urgent?" urgent":""}${st.arrived===o.id?" arrive":""}" data-l-open="${esc(o.id)}" draggable="true" data-l-drag="${esc(o.id)}">
-  <div class="lkt"><b>${esc(o.customer)}</b>${o.urgent?'<span class="tag hot">Eilig</span>':""}</div>
+  <div class="lkt"><b>${esc(o.customer)}</b><span class="lkr">${o.urgent?'<span class="tag hot">Eilig</span>':""}${o.assignee?`<span class="who" title="${esc(whoName(o.assignee))}">${esc(whoIni(o.assignee))}</span>`:""}</span></div>
   <div class="lkm">${sideChips(o)}<span class="lks">${esc(summary(o)||"Spezifikation offen")}</span></div>
   ${step?`<div class="lkstep">${step}</div>`:""}
   <div class="lkf"><span class="ldue ${late?"late":soon?"soon":""}">${o.due?esc(dueLabel(o.due)):"kein Termin"}</span>
@@ -102,7 +126,7 @@ function render(){
 
 /* ---------- Formular (Auftrag anlegen / bearbeiten) ---------- */
 const blankEar=()=>({anbindung:"RIC / Ex-Hörer",form:"",material:"",haerte:"",farbe:"",vent:"",kanal:"",extras:[],hoerer:""});
-const blank=()=>({id:null,customer:"",phone:"",sides:"beide",due:"",urgent:false,notes:"",spec:{same:true,R:blankEar(),L:blankEar(),abformung:{datum:iso(new Date()),masse:"Silikon (A-vernetzend)",qualitaet:"Gut",besonderheiten:""}}});
+const blank=()=>({id:null,assignee:H().me?.id||null,customer:"",phone:"",sides:"beide",due:"",urgent:false,notes:"",spec:{same:true,R:blankEar(),L:blankEar(),abformung:{datum:iso(new Date()),masse:"Silikon (A-vernetzend)",qualitaet:"Gut",besonderheiten:""}}});
 function getP(p){return p.split(".").reduce((o,k)=>o==null?o:o[k],st.form)}
 function setP(p,v){const ks=p.split(".");let o=st.form;ks.slice(0,-1).forEach(k=>{if(o[k]==null)o[k]={};o=o[k]});o[ks.at(-1)]=v}
 const chips=(p,opts,multi)=>`<div class="chips">${opts.map(v=>{const on=multi?(getP(p)||[]).includes(v):getP(p)===v;return `<button type="button" class="chip" ${multi?"data-lf-tog":"data-lf-set"}="${p}" data-v="${esc(v)}" aria-pressed="${on}">${esc(v)}</button>`}).join("")}</div>`;
@@ -119,7 +143,8 @@ function formHtml(){
  const earTabs=both&&s.same===false;
  return `<h3>${f.id?"Laborauftrag bearbeiten":"Neuer Laborauftrag"}</h3>
  <div class="lgrid"><label>Kunde<input data-lf-in="customer" value="${esc(f.customer)}" required placeholder="Vor- und Nachname"></label><label>Telefon<input data-lf-in="phone" value="${esc(f.phone||"")}" type="tel"></label>
-  <label>Anpasstermin<input data-lf-in="due" type="date" value="${esc(f.due||"")}"></label><div class="lq inline"><span class="lql">Priorität</span><div class="chips"><button type="button" class="chip" data-lf-urgent aria-pressed="${!!f.urgent}">Eilig</button></div></div></div>
+  <label>Anpasstermin<input data-lf-in="due" type="date" value="${esc(f.due||"")}"></label>
+  <div class="lq inline full"><span class="lql">Wer übernimmt?</span>${whoChips(f.assignee,"data-lf-who")}</div><div class="lq inline"><span class="lql">Priorität</span><div class="chips"><button type="button" class="chip" data-lf-urgent aria-pressed="${!!f.urgent}">Eilig</button></div></div></div>
  <div class="lsec"><h4>Abformung</h4>${row("Datum",`<input data-lf-in="spec.abformung.datum" type="date" value="${esc(s.abformung?.datum||"")}">`)}${row("Material",chips("spec.abformung.masse",OPT.masse))}${row("Qualität",chips("spec.abformung.qualitaet",OPT.qualitaet))}
   ${row("Besonderheiten",`<input data-lf-in="spec.abformung.besonderheiten" value="${esc(s.abformung?.besonderheiten||"")}" placeholder="z. B. enger 2. Knick, Exostose rechts">`)}</div>
  <div class="lsec"><h4>Otoplastik</h4>${row("Seite",chips("sides",["rechts","links","beide"]))}
@@ -142,13 +167,15 @@ function ensure(){
   if(d.lfSet){setP(d.lfSet,getP(d.lfSet)===d.v&&d.lfSet!=="sides"?"":d.v);paintForm();return}
   if(d.lfTog){const a=getP(d.lfTog)||[];setP(d.lfTog,a.includes(d.v)?a.filter(x=>x!==d.v):[...a,d.v]);paintForm();return}
   if(d.lfSame){st.form.spec.same=d.lfSame==="1";if(!st.form.spec.same)st.form.spec.L=JSON.parse(JSON.stringify(st.form.spec.R));paintForm();return}
+  if(d.lfWho!=null){st.form.assignee=st.form.assignee===d.lfWho?null:d.lfWho;paintForm();return}
   if(d.lfUrgent!=null){st.form.urgent=!st.form.urgent;paintForm();return}
   if(d.lfCancel!=null){document.getElementById("labDlg").close();return}
   if(d.lfDel!=null){if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Wirklich löschen?";return}
-   const id=st.form.id;document.getElementById("labDlg").close();const{error}=await H().sb.from("lab_orders").delete().eq("id",id);if(error)H().toast("Löschen fehlgeschlagen");else{st.orders=st.orders.filter(o=>o.id!==id);H().rerender();H().toast("Auftrag gelöscht")}return}
+   const id=st.form.id;document.getElementById("labDlg").close();const lt=(H().tasks||[]).find(t=>t.labOrderId===id&&t.status!=="erledigt");if(lt)H().saveTask({...lt,status:"erledigt",prevStatus:lt.status,doneAt:Date.now(),notes:((lt.notes||"")+" · Laborauftrag gelöscht").trim()},lt);
+   const{error}=await H().sb.from("lab_orders").delete().eq("id",id);if(error)H().toast("Löschen fehlgeschlagen");else{st.orders=st.orders.filter(o=>o.id!==id);H().rerender();H().toast("Auftrag gelöscht")}return}
   if(d.lfSave!=null){const fo=st.form;if(!fo.customer.trim()){f.querySelector('[data-lf-in="customer"]').focus();return}
    if(fo.sides!=="beide")fo.spec.same=true;if(fo.sides==="links"&&fo.spec.same)fo.spec.L=fo.spec.R;
-   const isNew=!fo.id,row={id:fo.id||(crypto.randomUUID?crypto.randomUUID():String(Date.now())),customer:fo.customer.trim(),phone:fo.phone||null,sides:fo.sides,due:fo.due||null,urgent:!!fo.urgent,notes:fo.notes||null,spec:fo.spec,
+   const isNew=!fo.id,row={id:fo.id||(crypto.randomUUID?crypto.randomUUID():String(Date.now())),assignee:fo.assignee||null,customer:fo.customer.trim(),phone:fo.phone||null,sides:fo.sides,due:fo.due||null,urgent:!!fo.urgent,notes:fo.notes||null,spec:fo.spec,
     ...(isNew?{stage:0,history:[{step:0,dir:0,at:new Date().toISOString(),by:meName()}]}:{})};
    document.getElementById("labDlg").close();await save(row,isNew?"Auftrag ist im Labor":"Auftrag gespeichert");return}
  });
@@ -196,5 +223,5 @@ document.addEventListener("click",e=>{
  const o=el.closest("[data-l-open]");if(o){openDetail(o.dataset.lOpen);return}
 },true);
 
-window.HD_LABOR={render,load,openForm,STEPS,COLS,OPT,state:st,openCount:()=>st.orders.filter(o=>!o.delivered_at).length,lateCount:()=>st.orders.filter(o=>!o.delivered_at&&o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length};
+window.HD_LABOR={render,load,openForm,syncTask,whoChips,STEPS,COLS,OPT,state:st,openCount:()=>st.orders.filter(o=>!o.delivered_at).length,lateCount:()=>st.orders.filter(o=>!o.delivered_at&&o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length};
 })();
