@@ -40,10 +40,10 @@ function dechunk(b: Uint8Array): Uint8Array {
 }
 
 // ---------- Zertifikat ----------
-// Der AkuWin-Server nutzt ein selbst ausgestelltes Zertifikat auf "localhost". Es wird einmalig aus dem
+// Der AkuWin-Server nutzt ein selbst ausgestelltes Zertifikat (CN localhost, gültig für 127.0.0.1). Es wird einmalig aus dem
 // TLS-1.2-Handshake gelesen (Certificate-Nachricht ist dort unverschlüsselt) und danach als EINZIGER
 // vertrauenswürdiger Aussteller verwendet. Damit akzeptiert die Verbindung nur genau dieses Zertifikat (Pinning).
-const TLS_NAME = Deno.env.get("AKUWIN_TLS_NAME") ?? "localhost";
+const TLS_NAME = Deno.env.get("AKUWIN_TLS_NAME") ?? "127.0.0.1"; // Zertifikat gilt laut subjectAltName nur für 127.0.0.1 / ::1
 let CERT_PEM = (Deno.env.get("AKUWIN_CERT_PEM") ?? "").replace(/\\n/g, "\n").trim();
 const u8 = (...a: number[]) => new Uint8Array(a);
 function cat(...p: Uint8Array[]) { const o = new Uint8Array(p.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of p) { o.set(x, i); i += x.length; } return o; }
