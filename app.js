@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.11.0 · Eigene Aufgaben im Abschluss";
+const VERSION="1.11.1 · Aufgeräumt";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -21,7 +21,6 @@ const IC={
  plus:'<path d="M12 5v14M5 12h14"/>'};
 const ICON_OF={"Rückruf":"phone","Anpassung":"user","Reservierung":"user","Aufarbeitung":"wrench","Reparatur":"wrench","Otoplastik":"wrench","Bestellung":"box","Zubehör":"box","Lagerausbuchung":"box","Rücksendung Hersteller":"box"};
 const svg=(n,s="")=>`<svg class="i" viewBox="0 0 24 24"${s}>${IC[n]}</svg>`;
-const STATUS={offen:"Offen",arbeit:"In Arbeit",wartet:"Wartet",erledigt:"Erledigt"};
 const PRIO={hoch:0,normal:1,niedrig:2};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -36,7 +35,7 @@ const show=v=>["setupView","loginView","pwView","nameView","appView"].forEach(x=
 
 let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
 $("ver").textContent=VERSION;
-window.HD={get tasks(){return tasks},cats:CATS,newTask:p=>openForm(null,p),saveTask:(t,b)=>save(t,b),esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),ask:(title,text,ok="Löschen",info=false)=>new Promise(res=>{const d=$("askDlg");$("askTitle").textContent=title;$("askText").textContent=text||"";$("askYes").textContent=ok;$("askNo").style.display=info?"none":"";$("askYes").className="btn "+(info||!/lösch|entfern/i.test(ok)?"primary":"danger");d.returnValue="";d.onclose=()=>res(d.returnValue==="yes");d.showModal();setTimeout(()=>$("askNo").focus(),30)}),
+window.HD={get tasks(){return tasks},cats:CATS,iso:d=>iso(d),uid:()=>uid(),newTask:p=>openForm(null,p),saveTask:(t,b)=>save(t,b),esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),ask:(title,text,ok="Löschen",info=false)=>new Promise(res=>{const d=$("askDlg");$("askTitle").textContent=title;$("askText").textContent=text||"";$("askYes").textContent=ok;$("askNo").style.display=info?"none":"";$("askYes").className="btn "+(info||!/lösch|entfern/i.test(ok)?"primary":"danger");d.returnValue="";d.onclose=()=>res(d.returnValue==="yes");d.showModal();setTimeout(()=>$("askNo").focus(),30)}),
  setTab:t=>{if(t==="labor"){go("labor");return}tab=t;render()},laborActive:()=>page==="labor"};
 
 /* ---------- Datenbank <-> App ---------- */
@@ -377,8 +376,10 @@ $("setupForm").addEventListener("submit",e=>{e.preventDefault();const u=$("s_url
  if(!/^https:\/\/.+/.test(u)){$("setupErr").textContent="Die URL muss mit https:// beginnen.";return}
  ls.set("cfg",{u,k});start(u,k)});
 const C=window.HD_CONFIG||{},saved=ls.get("cfg",null);
-if(location.hash==="#kunde"){}
-else if(C.SUPABASE_URL&&C.SUPABASE_KEY)start(C.SUPABASE_URL,C.SUPABASE_KEY);
-else if(saved)start(saved.u,saved.k);
-else show("setupView");
+// Kundenansicht (#kunde) startet ohne Anmeldung – sie bekommt ihre Daten live aus dem Beratungsfenster
+if(location.hash!=="#kunde"){
+ if(C.SUPABASE_URL&&C.SUPABASE_KEY)start(C.SUPABASE_URL,C.SUPABASE_KEY);
+ else if(saved)start(saved.u,saved.k);
+ else show("setupView");
+}
 })();

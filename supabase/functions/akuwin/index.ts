@@ -1,13 +1,16 @@
 // AkuWin-Brücke für das Hörakustik-Daugsch-Portal (Supabase Edge Function "akuwin")
-// - nur für angemeldete Team-Mitglieder
-// - der AkuWin-Server hat ein nicht öffentlich vertrauenswürdiges Zertifikat. Deshalb wird
-//   die Verbindung über den SHA-256-Fingerabdruck des Zertifikats abgesichert (Pinning):
-//   Zugangsdaten werden nur gesendet, wenn der Fingerabdruck exakt passt.
-// - Secrets (im Supabase-Dashboard → Edge Functions → Secrets):
-//     AKUWIN_URL          z. B. https://20155.ipnhosting.de:25850 (Server-Wurzel, Routen beginnen mit /akuwin-api/v6/…)
-//     AKUWIN_USER         API-Benutzer
-//     AKUWIN_PASSWORD     Passwort (trägt der Inhaber selbst ein)
-//     AKUWIN_CERT_SHA256  Fingerabdruck des Server-Zertifikats (aus action "diag")
+// - nur für angemeldete Team-Mitglieder (Prüfung des Supabase-Logins im Code)
+// - der AkuWin-Server hat ein selbst ausgestelltes Zertifikat ohne Servernamen. Die Verbindung läuft deshalb
+//   über TLS in reinem JavaScript; das empfangene Zertifikat wird exakt mit dem gepinnten verglichen,
+//   erst danach werden Daten oder Zugangsdaten gesendet.
+// - Secrets (Supabase-Dashboard → Edge Functions → Secrets):
+//     AKUWIN_URL           Server-Wurzel, z. B. https://20155.ipnhosting.de:25850 (Routen: /akuwin-api/v6/…)
+//     AKUWIN_USER          API-Benutzer
+//     AKUWIN_PASSWORD      Passwort (trägt der Inhaber selbst ein)
+//     AKUWIN_CERT_SHA256   optional: anderer Zertifikat-Fingerabdruck (Standard im Code)
+//     AKUWIN_CREATOR_CODE  optional: Mitarbeiterkürzel beim Anlegen von Terminen (Standard GD)
+//     AKUWIN_ALLOW_WRITE   optional: "1" erlaubt schreibende Aufrufe über "call"
+// - Aktionen: diag · clients · audiograms · appointments · apptMeta · clientAppointments · createAppointment · call (nur GET)
 
 import { makeTLSClient, setCryptoImplementation } from "npm:@reclaimprotocol/tls@0.1.5";
 import { webcryptoCrypto } from "npm:@reclaimprotocol/tls@0.1.5/webcrypto";
@@ -25,7 +28,7 @@ const CORS = {
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...CORS, "Content-Type": "application/json; charset=utf-8" } });
 
-type Raw = { status: number; headers: Record<string, string>; body: Uint8Array; cert: Record<string, unknown> };
+type Raw = { status: number; headers: Record<string, string>; body: Uint8Array };
 
 function dechunk(b: Uint8Array): Uint8Array {
   const out: number[] = [];
@@ -47,7 +50,6 @@ function dechunk(b: Uint8Array): Uint8Array {
 // Der AkuWin-Server nutzt ein selbst ausgestelltes Zertifikat (CN localhost, gültig für 127.0.0.1). Es wird einmalig aus dem
 // TLS-1.2-Handshake gelesen (Certificate-Nachricht ist dort unverschlüsselt) und danach als EINZIGER
 // vertrauenswürdiger Aussteller verwendet. Damit akzeptiert die Verbindung nur genau dieses Zertifikat (Pinning).
-const TLS_NAME = Deno.env.get("AKUWIN_TLS_NAME") ?? "127.0.0.1"; // Zertifikat gilt laut subjectAltName nur für 127.0.0.1 / ::1
 let CERT_PEM = (Deno.env.get("AKUWIN_CERT_PEM") ?? "").replace(/\\n/g, "\n").trim();
 const u8 = (...a: number[]) => new Uint8Array(a);
 function cat(...p: Uint8Array[]) { const o = new Uint8Array(p.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of p) { o.set(x, i); i += x.length; } return o; }
@@ -119,7 +121,7 @@ function parseHttp(all: Uint8Array): Raw {
   let b = all.slice(sep + 4);
   if ((hs["transfer-encoding"] || "").includes("chunked")) b = dechunk(b);
   else if (hs["content-length"]) b = b.slice(0, Number(hs["content-length"]));
-  return { status, headers: hs, body: b, cert: {} };
+  return { status, headers: hs, body: b };
 }
 function responseComplete(all: Uint8Array): boolean {
   let sep = -1;
@@ -132,13 +134,12 @@ function responseComplete(all: Uint8Array): boolean {
   return false;
 }
 async function raw(method: string, path: string, headers: Record<string, string> = {}, body?: string, needPin = true): Promise<Raw> {
-  // "~/pfad" = relativ zur Server-Wurzel statt zu AKUWIN_URL (nur für Erkundung)
-  const u = path.startsWith("~/") ? new URL(path.slice(1), BASE) : new URL(BASE + path);
+  const u = new URL(BASE + path);
   if (needPin && !PIN) throw new Error("Kein Zertifikat-Fingerabdruck hinterlegt");
   const want = b64only(await certPem());
   const tcp = await Deno.connect({ hostname: u.hostname, port: Number(u.port) || 443 });
   const bodyBuf = body != null ? new TextEncoder().encode(body) : null;
-  const h: Record<string, string> = { Host: Deno.env.get("AKUWIN_HOST_HEADER") || u.host, Connection: "close", Accept: "application/json", "User-Agent": "hd-portal/1", ...headers };
+  const h: Record<string, string> = { Host: u.host, Connection: "close", Accept: "application/json", "User-Agent": "hd-portal/1", ...headers };
   if (bodyBuf) h["Content-Length"] = String(bodyBuf.length);
   const reqBytes = cat(new TextEncoder().encode(`${method} ${u.pathname}${u.search} HTTP/1.1\r\n` + Object.entries(h).map(([k, v]) => `${k}: ${v}`).join("\r\n") + "\r\n\r\n"), bodyBuf || new Uint8Array(0));
   return await new Promise<Raw>((resolve, reject) => {
@@ -192,17 +193,8 @@ async function authHeaders(): Promise<Record<string, string>> {
   return { Authorization: "Bearer " + v };
 }
 
-function adminKeys(): string[] {
-  const k: string[] = [];
-  const sr = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"); if (sr) k.push(sr);
-  try { const o = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}"); for (const v of Object.values(o)) if (typeof v === "string") k.push(v); } catch { /* */ }
-  return k;
-}
 async function requireUser(req: Request) {
   const auth = req.headers.get("Authorization") || "";
-  const bearer = auth.replace(/^Bearer\s+/i, ""), apikey = req.headers.get("apikey") || "";
-  // Test aus dem Supabase-Dashboard (Service-/Secret-Schlüssel)
-  if (adminKeys().some((k) => k && (k === bearer || k === apikey))) return { id: "admin", email: "supabase-dashboard" };
   const url = Deno.env.get("SUPABASE_URL")!, key = Deno.env.get("SUPABASE_ANON_KEY") || "sb_publishable_zmvmJy06hh-0ls68C7NDkA_hc2JvVkq";
   const r = await fetch(url + "/auth/v1/user", { headers: { Authorization: auth, apikey: key } });
   if (!r.ok) return null;
@@ -219,42 +211,13 @@ Deno.serve(async (req) => {
   try {
     if (p.action === "diag") {
       // liest das Zertifikat und prüft die Verbindung – sendet keine Zugangsdaten
-      const out: Record<string, unknown> = { base: BASE, tlsName: TLS_NAME, pinned: !!PIN, hasUser: !!USER, hasPassword: !!PASS, certFromSecret: !!(Deno.env.get("AKUWIN_CERT_PEM")) };
+      const out: Record<string, unknown> = { base: BASE, pinned: !!PIN, hasUser: !!USER, hasPassword: !!PASS, certFromSecret: !!(Deno.env.get("AKUWIN_CERT_PEM")) };
       try {
         const pem = await certPem(); const fp = await sha256(pemDer(pem));
         out.fingerprint256 = fp; out.pinMatches = PIN ? fp.replace(/:/g, "").toLowerCase() === PIN : null; out.pem = pem;
       } catch (e) { out.certError = String(e); }
-      try { const r = await raw("GET", "/swagger/index.html", {}, undefined, false); out.reach = r.status; } catch (e) { out.reach = String(e); }
+      try { const r = await raw("GET", "/akuwin-api/v6/appointments/types", {}, undefined, false); out.reach = r.status === 401 ? "erreichbar (Anmeldung erforderlich)" : r.status; } catch (e) { out.reach = String(e); }
       return json(out);
-    }
-    if (p.action === "swagger") {
-      // öffentliche API-Beschreibung (ohne Zugangsdaten)
-      const tries = ["/swagger/v1/swagger.json", "/swagger/swagger.json", "/swagger/docs/v1", "/swagger.json", "/openapi.json", "/swagger/v2/swagger.json"];
-      const seen: Record<string, number> = {};
-      for (const t of tries) {
-        try { const r = await raw("GET", t, {}, undefined, false); seen[t] = r.status; if (r.status === 200) return json({ path: t, spec: JSON.parse(text(r)) }); } catch (e) { seen[t] = -1; console.log(t, String(e)); }
-      }
-      let index = "";
-      try { index = text(await raw("GET", "/swagger/index.html", {}, undefined, false)).slice(0, 4000); } catch { /* */ }
-      return json({ error: "Swagger-Datei nicht gefunden", seen, index }, 404);
-    }
-    if (p.action === "probe") {
-      // ohne Zugangsdaten: zeigt Status/Kopfzeilen eines Pfads (z. B. um das Anmeldeverfahren zu erkennen)
-      const path = String(p.path || "/");
-      if (!(path.startsWith("/") || path.startsWith("~/")) || path.includes("..")) return json({ error: "Ungültiger Pfad" }, 400);
-      const hostHdr = typeof (p as { host?: unknown }).host === "string" ? { Host: String((p as { host: string }).host) } : {};
-      const r = await raw((p.method || "GET").toUpperCase(), path, { ...hostHdr, ...(p.body != null ? { "Content-Type": "application/json" } : {}) }, p.body != null ? JSON.stringify(p.body) : undefined, false);
-      return json({ status: r.status, headers: r.headers, body: text(r).slice(0, 3000) });
-    }
-    if (p.action === "scan") {
-      // mehrere Pfade ohne Zugangsdaten abfragen (nur Status)
-      const paths = (Array.isArray((p as { paths?: unknown }).paths) ? (p as { paths: string[] }).paths : []).slice(0, 30);
-      const res: Record<string, unknown> = {};
-      await Promise.all(paths.map(async (x) => {
-        if (!(x.startsWith("/") || x.startsWith("~/")) || x.includes("..")) { res[x] = "ungültig"; return; }
-        try { const r = await raw("GET", x, {}, undefined, false); res[x] = r.status + " " + (r.headers["content-type"] || "") + " " + (r.headers["location"] || "") + " " + text(r).slice(0, 120); } catch (e) { res[x] = String(e); }
-      }));
-      return json(res);
     }
     if (p.action === "clients") {
       // Kundensuche: "Müller", "Mül", "Anna Müller" → nur die Felder, die die Beratung braucht

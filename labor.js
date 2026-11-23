@@ -19,11 +19,10 @@ const OPT={
  extras:["Ziehfaden","Gravur Name / Seite","Lack glänzend","Lack matt","Antibakteriell","Filter (Gehörschutz)"],
  masse:["Silikon (A-vernetzend)","Silikon (C-vernetzend)","Digitaler Ohrscan"],
  qualitaet:["Gut","Nachbessern nötig"]};
-const st={orders:[],loaded:false,loading:false,missing:false,filter:"",archive:false,form:null,chan:null,detail:null};
+const st={orders:[],loaded:false,loading:false,missing:false,archive:false,form:null,chan:null,detail:null};
 const H=()=>window.HD;
 const esc=s=>H().esc(s);
-const pad=n=>String(n).padStart(2,"0");
-const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const iso=d=>H().iso(d);
 const fmt=s=>{if(!s)return"";const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d).toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"})};
 const daysTo=s=>{if(!s)return null;const[y,m,d]=s.split("-").map(Number);const t=new Date();t.setHours(0,0,0,0);return Math.round((new Date(y,m-1,d)-t)/864e5)};
 const dueLabel=s=>{const n=daysTo(s);if(n==null)return"";return n<0?`${-n} Tag${n===-1?"":"e"} überfällig`:n===0?"Anpassung heute":n===1?"Anpassung morgen":`Anpassung ${fmt(s)}`};
@@ -59,7 +58,7 @@ async function syncTask(o){
  const all=H().tasks||[],ex=all.find(t=>t.labOrderId===o.id);
  const finished=!!o.delivered_at||o.stage>=1;
  if(!ex){if(finished||!o.assignee)return;
-  const t={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),title:taskTitle(o),category:"Otoplastik",assignee:o.assignee,due:iso(new Date()),
+  const t={id:H().uid(),title:taskTitle(o),category:"Otoplastik",assignee:o.assignee,due:iso(new Date()),
    priority:o.urgent?"hoch":"normal",status:"offen",customer:o.customer,phone:o.phone||"",notes:["Bitte im Labor bearbeiten: "+[sidesTxt(o),summary(o)].filter(Boolean).join(", "),o.due?"Anpassung "+dueLabel(o.due):"",o.notes].filter(Boolean).join(" · "),labOrderId:o.id,consultationId:o.consultation_id||null,createdAt:Date.now()};
   await H().saveTask(t,null);return}
  const nt={...ex,title:taskTitle(o),customer:o.customer,phone:o.phone||ex.phone,priority:o.urgent?"hoch":ex.priority==="hoch"?"normal":ex.priority};
@@ -176,7 +175,7 @@ function ensure(){
    const{error}=await H().sb.from("lab_orders").delete().eq("id",id);if(error)H().toast("Löschen fehlgeschlagen");else{st.orders=st.orders.filter(o=>o.id!==id);H().rerender();H().toast("Auftrag gelöscht")}return}
   if(d.lfSave!=null){const fo=st.form;if(!fo.customer.trim()){f.querySelector('[data-lf-in="customer"]').focus();return}
    if(fo.sides!=="beide")fo.spec.same=true;if(fo.sides==="links"&&fo.spec.same)fo.spec.L=fo.spec.R;
-   const isNew=!fo.id,row={id:fo.id||(crypto.randomUUID?crypto.randomUUID():String(Date.now())),assignee:fo.assignee||null,customer:fo.customer.trim(),phone:fo.phone||null,sides:fo.sides,due:fo.due||null,urgent:!!fo.urgent,notes:fo.notes||null,spec:fo.spec,
+   const isNew=!fo.id,row={id:fo.id||H().uid(),assignee:fo.assignee||null,customer:fo.customer.trim(),phone:fo.phone||null,sides:fo.sides,due:fo.due||null,urgent:!!fo.urgent,notes:fo.notes||null,spec:fo.spec,
     ...(isNew?{stage:0,history:[{step:0,dir:0,at:new Date().toISOString(),by:meName()}]}:{})};
    document.getElementById("labDlg").close();await save(row,isNew?"Auftrag ist im Labor":"Auftrag gespeichert");return}
  });

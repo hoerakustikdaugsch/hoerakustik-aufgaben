@@ -2,9 +2,9 @@
    Daten kommen über die Supabase-Funktion "akuwin" (Aktion "appointments"). Nichts davon wird im Browser gespeichert. */
 (function(){
 const H=()=>window.HD;
-const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const esc=s=>H().esc(s);
 const pad=n=>String(n).padStart(2,"0");
-const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const iso=d=>H().iso(d);
 const addD=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const monday=d=>{const x=new Date(d);x.setHours(12,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x};
 const hm=s=>s.slice(11,16);

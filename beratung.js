@@ -5,9 +5,10 @@
 const KUNDE=location.hash==="#kunde";
 const H=()=>window.HD;
 const $=id=>document.getElementById(id);
-const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const esc=s=>H().esc(s);
 const eur=n=>(Math.round(n)).toLocaleString("de-DE")+" €";
-const uid=()=>crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(36).slice(2);
+const uid=()=>H().uid();
+const isoD=d=>H().iso(d);
 const toast=m=>H()&&H().toast(m);
 /* ---------- Logik ---------- */
 const STAGES=[
@@ -116,7 +117,6 @@ function audioSvg(big=false,ear=null,print=false){
  for(let d=0;d<=120;d+=20)s+=`<line x1="${l}" x2="${W-r}" y1="${y(d)}" y2="${y(d)}" stroke="#DCE6E2"/><text x="${l-8}" y="${y(d)+4}" text-anchor="end" font-size="11" fill="#587168">${d}</text>`;
  FREQ.forEach((f,i)=>s+=`<line x1="${x(i)}" x2="${x(i)}" y1="${t}" y2="${H-b}" stroke="#E7EEEB"/><text x="${x(i)}" y="${H-10}" text-anchor="middle" font-size="11" fill="#587168">${f>=1000?f/1000+"k":f}</text>`);
  // Beschriftungen über dem Raster, mit weißem Rand gut lesbar
- const halo='paint-order="stroke" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"';
  // Grad-Beschriftung rechts neben dem Raster (mittig je Zone, lange Begriffe zweizeilig)
  zones.forEach(([a,c,col,lb])=>{const m=(y(Math.max(a,-10))+y(Math.min(c,120)))/2,w=lb.split(" ");const lines=w.length>2?[w.slice(0,2).join(" "),w.slice(2).join(" ")]:[lb];
   s+=`<rect x="${W-r+4}" y="${y(a)+1}" width="4" height="${y(c)-y(a)-2}" rx="2" fill="${col}" stroke="#C9D8D2" stroke-width=".6"/>`;
@@ -192,19 +192,18 @@ function tfDefaults(){
 /* ---------- Freie Termine finden ---------- */
 // Öffnungszeiten (Mo=1 … Fr=5) in Minuten ab 0 Uhr
 const OPEN={1:[600,1020],2:[600,1020],3:[600,840],4:[600,1020],5:[600,840]};
-const ymdL=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const minOf=s=>Number(s.slice(11,13))*60+Number(s.slice(14,16));
 async function akBusy(force){
  const from=new Date(),to=new Date();to.setDate(to.getDate()+AK.days);
- const key=ymdL(from)+"|"+ymdL(to);if(!force&&AK.busyKey===key&&AK.busy)return;if(AK.busyLoading)return;
+ const key=isoD(from)+"|"+isoD(to);if(!force&&AK.busyKey===key&&AK.busy)return;if(AK.busyLoading)return;
  AK.busyLoading=true;
- try{const d=await akInvoke({action:"appointments",from:ymdL(from),to:ymdL(to)});AK.busy=d.appointments||[];AK.busyKey=key}catch(e){AK.busy=null;AK.busyErr=e.message}
+ try{const d=await akInvoke({action:"appointments",from:isoD(from),to:isoD(to)});AK.busy=d.appointments||[];AK.busyKey=key}catch(e){AK.busy=null;AK.busyErr=e.message}
  AK.busyLoading=false;rr();
 }
 function freeSlots(){
  if(!AK.busy)return null;const t=S.tf||{},dur=Number(t.minutes)||60,res=t.res;const now=new Date(),nowM=now.getHours()*60+now.getMinutes();
  const out=[];
- for(let i=0;i<=AK.days;i++){const d=new Date();d.setDate(d.getDate()+i);const wd=d.getDay(),oh=OPEN[wd];if(!oh)continue;const day=ymdL(d);
+ for(let i=0;i<=AK.days;i++){const d=new Date();d.setDate(d.getDate()+i);const wd=d.getDay(),oh=OPEN[wd];if(!oh)continue;const day=isoD(d);
   // belegte Zeiten dieser Ressource (abgesagte zählen nicht); ganztägige Termine sperren den Tag
   const rooms=t.room===false?[]:(AK.meta&&AK.meta.resources||[]).filter(x=>x.type!=="Employee").map(x=>x.id);
   const appts=AK.busy.filter(a=>a.start.slice(0,10)<=day&&a.end.slice(0,10)>=day&&a.state!=="Cancelled"&&(!a.resources.length||a.resources.includes(res)||a.resources.some(r=>rooms.includes(r))));
@@ -220,7 +219,7 @@ function freeSlots(){
 }
 const hhmm=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
 function slotsHtml(){
- const key=ymdL(new Date())+"|"+(()=>{const x=new Date();x.setDate(x.getDate()+AK.days);return ymdL(x)})();
+ const key=isoD(new Date())+"|"+(()=>{const x=new Date();x.setDate(x.getDate()+AK.days);return isoD(x)})();
  if((!AK.busy||AK.busyKey!==key)&&!AK.busyLoading)setTimeout(()=>akBusy(),0);
  if(AK.busyLoading&&!AK.busy)return '<p class="muted">Freie Zeiten werden in AkuWin gesucht …</p>';
  if(!AK.busy)return `<p class="akerr">Freie Zeiten konnten nicht geladen werden${AK.busyErr?": "+esc(AK.busyErr):""}.</p>`;
@@ -408,11 +407,9 @@ function stepAbschluss(){
 }
 
 
-const OOPT={anbindung:["RIC / Ex-Hörer","HdO mit Schlauch","IdO-Schale","Gehörschutz","Schwimmschutz","In-Ear-Monitor"],form:["Vollschale (Concha)","Halbschale","Kralle","Spange / Skelett","Gehörgang (Canal)","Mini-Canal","Hohlschale"],
- material:["Hart (Acrylat / Fotopolymer)","Weich (Silikon)","Thermoplastisch"],haerte:["Shore 40","Shore 60","Shore 70"],farbe:["Transparent","Haut / Beige","Braun","Rot (rechts) / Blau (links)","Schwarz","Individuell"],
- vent:["Keine","0,8 mm","1,0 mm","1,5 mm","2,0 mm","2,5 mm","Offen / IROS"],kanal:["Kurz","Mittel","Lang (2. Knick)"],extras:["Ziehfaden","Gravur Name / Seite","Lack glänzend","Lack matt","Antibakteriell","Filter (Gehörschutz)"],
- masse:["Silikon (A-vernetzend)","Silikon (C-vernetzend)","Digitaler Ohrscan"],qualitaet:["Gut","Nachbessern nötig"]};
-const LSTEPS=["Reinigen","Beschneiden","Scannen","Modeling","Druck","Finishing"];
+// Otoplastik-Auswahllisten und Laborschritte kommen aus dem Labor-Modul (eine Quelle für beide)
+const OOPT=window.HD_LABOR.OPT;
+const LSTEPS=window.HD_LABOR.STEPS.map(x=>x.t);
 function earOto(side){const p="oto."+side,e=S.oto[side];
  return `<div class="q"><span class="ql">Anbindung</span>${chips(p+".anbindung",OOPT.anbindung)}</div><div class="q"><span class="ql">Form</span>${chips(p+".form",OOPT.form)}</div>
  <div class="q"><span class="ql">Material</span>${chips(p+".material",OOPT.material)}</div>${(e.material||"").startsWith("Weich")?`<div class="q"><span class="ql">Härte</span>${chips(p+".haerte",OOPT.haerte)}</div>`:""}
@@ -488,7 +485,6 @@ async function delConsultation(id){
 function newConsultation(){AK.q="";AK.res=null;AK.audios=null;AK.upcoming=null;S=empty();cid=uid();mode="edit";step=0;customer=false;dirty=false;H().rerender();window.scrollTo(0,0)}
 
 /* ---------- Aufgaben & Labor ---------- */
-const isoD=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 async function createTask(kind,title,cat,opt={}){
  const dev=DEVICES.find(d=>d.id===S.device);let due=new Date();due.setDate(due.getDate()+(kind==="call"?2:1));if(opt.due)due=new Date(opt.due+"T12:00");
  const assignee=opt.assignee!==undefined?opt.assignee||"":H().me?.id||"";
@@ -588,7 +584,6 @@ function brochureHtml(){
  const dimTxt=["In ruhiger Umgebung","Bei Gesprächen mit mehreren","In lebhafter Umgebung"];
  const needTxt=["kaum Unterstützung","etwas Unterstützung","spürbare Unterstützung","viel Unterstützung","sehr viel Unterstützung"];
  const goals=S.ziele.filter(z=>z.t).sort((a,b)=>a.p-b.p);
- const wishes=[...S.wuensche,S.bauform&&S.bauform!=="noch offen"?"Bauform: "+S.bauform:"",S.energie&&S.energie!=="egal"?"Energie: "+S.energie:""].filter(Boolean);
  const dR=degree(pta("R")),dL=degree(pta("L"));
  const foot=(n)=>`<footer><img src="img/logo.png" alt="Hörakustik Daugsch"><span>${FIRMA.claim}</span><span>${n}</span></footer>`;
  const reasons=DIMS.map((d,i)=>{const ex=SITS.filter(s=>s.dim===i&&S.sit[s.id]&&S.sit[s.id].d>=2).map(s=>s.t);return ex.length?`<li><b>${dimTxt[i]}</b> – zum Beispiel ${esc(ex.slice(0,3).join(", "))} – brauchen Sie ${needTxt[rec.n[i]-1]}. ${st.name} bietet hier ${needTxt[st.p[i]-1]}.</li>`:""}).filter(Boolean);
@@ -615,7 +610,7 @@ p{margin:0;font-size:11pt;line-height:1.55}
 .cover .ph{position:absolute;inset:0;background:#1B493B url(img/empfang.jpg) center top/auto 72% no-repeat}
 .cover .ph::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,#1B493B 0%,#1B493B 36%,rgba(27,73,59,.9) 41%,rgba(27,73,59,.6) 48%,rgba(27,73,59,.28) 56%,rgba(27,73,59,.08) 63%,rgba(27,73,59,0) 70%)}
 .cover .band{position:absolute;left:0;right:0;bottom:0;height:40%;background:transparent;color:#fff;padding:16mm 18mm;display:flex;flex-direction:column;gap:5mm}
-.cover .logo{width:66mm;display:block;margin-bottom:4mm}.cover .bandlogo{display:none}
+.cover .logo{width:66mm;display:block;margin-bottom:4mm}
 .cover h1{font-size:34pt}
 .cover .who{font-size:15pt;color:#B7C6C2}
 .cover .meta{margin-top:auto;display:flex;justify-content:space-between;font-size:10pt;color:#B7C6C2}
@@ -628,7 +623,6 @@ p{margin:0;font-size:11pt;line-height:1.55}
 .toc div{display:flex;gap:3mm;font-size:10.5pt}.toc i{font-style:normal;font-weight:700;color:#276955;width:6mm}
 /* Hörsituation */
 .box{background:#EEF3F1;border-radius:5mm;padding:6mm 7mm}
-.aud{height:86mm}.aud svg{width:100%;height:100%;display:block}
 .aud2 .audpair{display:grid;grid-template-columns:1fr 1fr;gap:5mm}.aud2 figure{margin:0}.aud2 figcaption{display:flex;align-items:baseline;gap:3mm;margin-bottom:1.5mm;font-size:9.5pt}
 .aud2 figcaption .ear{font-weight:700}.aud2 .ear.R{color:#C0392B}.aud2 .ear.L{color:#2F5D8A}.aud2 figcaption small{color:#6B7F78}.aud2 svg{width:100%;height:auto;display:block}.aud2 .audleg{font-size:8.5pt;color:#6B7F78;display:flex;gap:6mm;margin:1mm 0 0}.aud2 .audleg .sw{display:inline-block;width:4mm;height:2.6mm;background:rgba(39,105,85,.16);border-radius:1mm;margin-right:1.5mm;vertical-align:-.3mm}
 .deg{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
