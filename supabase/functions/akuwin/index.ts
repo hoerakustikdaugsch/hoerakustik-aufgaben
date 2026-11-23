@@ -9,8 +9,12 @@
 //     AKUWIN_PASSWORD     Passwort (trägt der Inhaber selbst ein)
 //     AKUWIN_CERT_SHA256  Fingerabdruck des Server-Zertifikats (aus action "diag")
 
+import { makeTLSClient, setCryptoImplementation } from "npm:@reclaimprotocol/tls@0.1.5";
+import { webcryptoCrypto } from "npm:@reclaimprotocol/tls@0.1.5/webcrypto";
+setCryptoImplementation(webcryptoCrypto);
+
 const BASE = (Deno.env.get("AKUWIN_URL") ?? "https://20155.ipnhosting.de:25850/akuwin-api").replace(/\/+$/, "");
-const PIN = (Deno.env.get("AKUWIN_CERT_SHA256") ?? "").replace(/[^0-9a-f]/gi, "").toLowerCase();
+const PIN = (Deno.env.get("AKUWIN_CERT_SHA256") ?? "1F:7B:D7:DD:E7:EF:8C:12:13:8D:EF:88:55:0E:0B:EB:6B:C9:C8:99:05:45:71:1A:1B:88:4E:79:36:D9:FA:D5").replace(/[^0-9a-f]/gi, "").toLowerCase();
 const USER = Deno.env.get("AKUWIN_USER") ?? "";
 const PASS = Deno.env.get("AKUWIN_PASSWORD") ?? "";
 const CORS = {
@@ -100,33 +104,74 @@ async function certPem(): Promise<string> {
   return pem;
 }
 
-// HTTP/1.1 über TLS – vertraut ausschließlich dem AkuWin-Zertifikat
+// HTTP/1.1 über TLS (reines JavaScript). Die eingebaute Zertifikatsprüfung ist aus, weil das AkuWin-Zertifikat
+// keinen gültigen Namen enthält. Stattdessen wird das empfangene Zertifikat Byte für Byte mit dem gepinnten
+// verglichen; erst danach werden Daten (und ggf. Zugangsdaten) gesendet.
+const b64only = (pem: string) => pem.replace(/-----[^-]+-----|\s/g, "");
+function parseHttp(all: Uint8Array): Raw {
+  let sep = -1;
+  for (let i = 0; i < all.length - 3; i++) if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
+  if (sep < 0) throw new Error("Ungültige Antwort von AkuWin (" + all.length + " Bytes)");
+  const head = new TextDecoder().decode(all.slice(0, sep)).split("\r\n");
+  const status = Number(head[0].split(" ")[1]);
+  const hs: Record<string, string> = {};
+  for (const l of head.slice(1)) { const i = l.indexOf(":"); if (i > 0) hs[l.slice(0, i).trim().toLowerCase()] = l.slice(i + 1).trim(); }
+  let b = all.slice(sep + 4);
+  if ((hs["transfer-encoding"] || "").includes("chunked")) b = dechunk(b);
+  else if (hs["content-length"]) b = b.slice(0, Number(hs["content-length"]));
+  return { status, headers: hs, body: b, cert: {} };
+}
+function responseComplete(all: Uint8Array): boolean {
+  let sep = -1;
+  for (let i = 0; i < all.length - 3; i++) if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
+  if (sep < 0) return false;
+  const head = new TextDecoder().decode(all.slice(0, sep)).toLowerCase();
+  const cl = head.match(/content-length:\s*(\d+)/);
+  if (cl) return all.length - sep - 4 >= Number(cl[1]);
+  if (head.includes("chunked")) { const tail = new TextDecoder().decode(all.slice(Math.max(sep, all.length - 7))); return tail.endsWith("0\r\n\r\n"); }
+  return false;
+}
 async function raw(method: string, path: string, headers: Record<string, string> = {}, body?: string, needPin = true): Promise<Raw> {
   const u = new URL(BASE + path);
-  if (needPin && !PIN) throw new Error("Kein Zertifikat-Fingerabdruck hinterlegt (Secret AKUWIN_CERT_SHA256)");
-  const pem = await certPem();
+  if (needPin && !PIN) throw new Error("Kein Zertifikat-Fingerabdruck hinterlegt");
+  const want = b64only(await certPem());
   const tcp = await Deno.connect({ hostname: u.hostname, port: Number(u.port) || 443 });
-  const conn = await Deno.startTls(tcp, { hostname: TLS_NAME, caCerts: [pem] });
-  const timer = setTimeout(() => { try { conn.close(); } catch { /* */ } }, 25000);
-  try {
-    const bodyBuf = body != null ? new TextEncoder().encode(body) : null;
-    const h: Record<string, string> = { Host: u.host, Connection: "close", Accept: "application/json", "User-Agent": "hd-portal/1", ...headers };
-    if (bodyBuf) h["Content-Length"] = String(bodyBuf.length);
-    await conn.write(new TextEncoder().encode(`${method} ${u.pathname}${u.search} HTTP/1.1\r\n` + Object.entries(h).map(([k, v]) => `${k}: ${v}`).join("\r\n") + "\r\n\r\n"));
-    if (bodyBuf) await conn.write(bodyBuf);
-    let all = new Uint8Array(0);
-    while (true) { const b = new Uint8Array(32768); let n: number | null = null; try { n = await conn.read(b); } catch { break; } if (!n) break; all = cat(all, b.slice(0, n)); }
-    let sep = -1;
-    for (let i = 0; i < all.length - 3; i++) if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
-    if (sep < 0) throw new Error("Ungültige Antwort von AkuWin");
-    const head = new TextDecoder().decode(all.slice(0, sep)).split("\r\n");
-    const status = Number(head[0].split(" ")[1]);
-    const hs: Record<string, string> = {};
-    for (const l of head.slice(1)) { const i = l.indexOf(":"); if (i > 0) hs[l.slice(0, i).trim().toLowerCase()] = l.slice(i + 1).trim(); }
-    let b = all.slice(sep + 4);
-    if ((hs["transfer-encoding"] || "").includes("chunked")) b = dechunk(b);
-    return { status, headers: hs, body: b, cert: {} };
-  } finally { clearTimeout(timer); try { conn.close(); } catch { /* */ } }
+  const bodyBuf = body != null ? new TextEncoder().encode(body) : null;
+  const h: Record<string, string> = { Host: u.host, Connection: "close", Accept: "application/json", "User-Agent": "hd-portal/1", ...headers };
+  if (bodyBuf) h["Content-Length"] = String(bodyBuf.length);
+  const reqBytes = cat(new TextEncoder().encode(`${method} ${u.pathname}${u.search} HTTP/1.1\r\n` + Object.entries(h).map(([k, v]) => `${k}: ${v}`).join("\r\n") + "\r\n\r\n"), bodyBuf || new Uint8Array(0));
+  return await new Promise<Raw>((resolve, reject) => {
+    let resp = new Uint8Array(0), certOk = false, done = false;
+    const finish = (err?: unknown) => {
+      if (done) return; done = true; clearTimeout(timer);
+      try { tcp.close(); } catch { /* */ }
+      if (!resp.length) { reject(err instanceof Error ? err : new Error(String(err || "Keine Antwort von AkuWin"))); return; }
+      try { resolve(parseHttp(resp)); } catch (e) { reject(e); }
+    };
+    const timer = setTimeout(() => finish(new Error("Zeitüberschreitung bei AkuWin")), 25000);
+    const tls = makeTLSClient({
+      host: u.hostname,
+      verifyServerCertificate: false,
+      supportedProtocolVersions: ["TLS1_3", "TLS1_2"],
+      async write({ header, content }) { await tcp.write(cat(header, content)); },
+      onRecvCertificates({ certificates }) {
+        certOk = !!certificates[0] && b64only(certificates[0].serialiseToPem()) === want;
+        if (!certOk) { tls.end(new Error("Zertifikat passt nicht – Verbindung abgebrochen")).catch(() => {}); finish(new Error("Zertifikat passt nicht zum gepinnten AkuWin-Zertifikat")); }
+      },
+      onHandshake() {
+        if (!certOk) { finish(new Error("Zertifikat wurde nicht geprüft")); return; }
+        tls.write(reqBytes).catch((e) => finish(e));
+      },
+      onApplicationData(d) { resp = cat(resp, d); if (responseComplete(resp)) finish(); },
+      onTlsEnd(err) { finish(err); },
+    });
+    (async () => {
+      const buf = new Uint8Array(32768);
+      try { while (!done) { const n = await tcp.read(buf); if (!n) break; await tls.handleReceivedBytes(buf.slice(0, n)); } } catch (e) { finish(e); return; }
+      finish();
+    })();
+    tls.startHandshake().catch((e) => finish(e));
+  });
 }
 const text = (r: Raw) => new TextDecoder().decode(r.body);
 
@@ -180,28 +225,6 @@ Deno.serve(async (req) => {
       } catch (e) { out.certError = String(e); }
       try { const r = await raw("GET", "/swagger/index.html", {}, undefined, false); out.reach = r.status; } catch (e) { out.reach = String(e); }
       return json(out);
-    }
-    if (p.action === "diag3") {
-      // node:tls-Varianten: eigenes Zertifikat als CA, Namensprüfung durch exakten Zertifikatsvergleich ersetzt
-      const u = new URL(BASE), port = Number(u.port) || 443, pem = await certPem();
-      const tlsm = await import("node:tls");
-      const run = (opts: Record<string, unknown>) => new Promise((res) => {
-        const log: string[] = []; let data = "";
-        const s = tlsm.connect({ host: u.hostname, port, ...opts });
-        const to = setTimeout(() => { s.destroy(); res({ log, data: data.slice(0, 300), r: "timeout" }); }, 12000);
-        s.on("secureConnect", () => { log.push("secureConnect authorized=" + (s as unknown as { authorized: boolean }).authorized);
-          s.write(`GET ${u.pathname}/swagger/index.html HTTP/1.1\r\nHost: ${u.host}\r\nConnection: close\r\n\r\n`, (e?: Error) => log.push("write cb " + (e ? e.message : "ok"))); });
-        s.on("data", (d: unknown) => { data += String(d); });
-        s.on("error", (e: Error & { code?: string }) => { log.push("error " + e.code + " " + e.message); });
-        s.on("close", () => { clearTimeout(to); res({ log, data: data.slice(0, 300) }); });
-      });
-      const ok = () => undefined;
-      return json({
-        v1: await run({ rejectUnauthorized: false }),
-        v2: await run({ rejectUnauthorized: false, servername: "ipnAkuWinServer" }),
-        v3: await run({ ca: [pem], checkServerIdentity: ok }),
-        v4: await run({ ca: [pem], checkServerIdentity: ok, rejectUnauthorized: false, servername: "ipnAkuWinServer" }),
-      });
     }
     if (p.action === "swagger") {
       // öffentliche API-Beschreibung (ohne Zugangsdaten)
