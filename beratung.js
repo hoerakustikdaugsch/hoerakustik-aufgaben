@@ -373,6 +373,24 @@ function stepEmpfehlung(){
   <small class="note">Unverbindliche Preisorientierung. Der endgültige Preis richtet sich nach der gewählten Versorgung und wird in einem Kostenvoranschlag festgehalten.</small>
   <button class="btn light" data-cust>Dem Kunden zeigen</button>`:'<h3>Preisorientierung</h3><span class="note">Bitte ein Gerät wählen.</span>'}</aside></div>`;
 }
+/* Eigene Aufgabe mit Kundenbezug */
+function freeTaskForm(){
+ const f=S.ft||(S.ft={});if(!f.due){const d=new Date();d.setDate(d.getDate()+1);f.due=isoD(d)}if(f.who===undefined)f.who=H().me?.id||"";if(!f.cat)f.cat="Rückruf";
+ const cats=(H().cats||[]).map(([g,cs])=>`<optgroup label="${esc(g)}">${cs.map(c=>`<option ${f.cat===c?"selected":""}>${esc(c)}</option>`).join("")}</optgroup>`).join("");
+ return `<div class="ftask"><h4>Eigene Aufgabe</h4>
+  <div class="form ftgrid"><label class="full">Aufgabe<input data-in="ft.title" value="${esc(f.title||"")}" placeholder="z. B. Hörsystem beim Hersteller bestellen" maxlength="160"></label>
+   <label>Kategorie<select data-in="ft.cat">${cats}</select></label>
+   <label>Zuständig<select data-in="ft.who"><option value="">– niemand –</option>${H().team().map(m=>`<option value="${esc(m.id)}" ${f.who===m.id?"selected":""}>${esc(m.name)}</option>`).join("")}</select></label>
+   <label>Fällig<input type="date" data-in="ft.due" value="${esc(f.due)}"></label>
+   <label class="full">Notiz<input data-in="ft.notes" value="${esc(f.notes||"")}" placeholder="optional"></label></div>
+  <div class="nav2"><div class="chips"><button type="button" class="chip" data-ftprio aria-pressed="${f.prio==="hoch"}">Dringend</button></div><span class="muted">Wird mit ${esc(name())}${S.kunde.tel?" ("+esc(S.kunde.tel)+")":""} verknüpft.</span><button type="button" class="btn primary" data-ftcreate>+ Aufgabe anlegen</button></div></div>`;
+}
+async function freeTaskCreate(){
+ const f=S.ft||{};const title=(f.title||"").trim();
+ if(!title){toast("Bitte die Aufgabe beschreiben");const i=document.querySelector('[data-in="ft.title"]');if(i)i.focus();return}
+ const ok=await createTask("free-"+uid(),title,f.cat||"Sonstiges",{assignee:f.who||"",due:f.due,priority:f.prio==="hoch"?"hoch":"normal",notes:(f.notes||"").trim()});
+ if(ok!==false){S.ft={cat:f.cat,who:f.who,due:f.due};changed();rr()}
+}
 function stepAbschluss(){
  const dev=DEVICES.find(d=>d.id===S.device),count=ears(),n=name();
  const quick=[["reserve","Gerät vorreservieren",`Gerät vorreservieren: ${dev?dev.m+" "+dev.model:"Stufe "+STAGES[curStage()].name}${count===2?" beidseitig":""} – ${n}`,"Reservierung"],
@@ -381,7 +399,8 @@ function stepAbschluss(){
   ["fit","Anpasstermin vorbereiten",`Anpassung vorbereiten – ${n}`,"Anpassung"]];
  return (S.oto.sent?`<div class="okbox"><b>Laborauftrag gesendet</b><span>Otoplastik für ${esc(n)} steht im Labor-Reiter der Aufgaben – Schritt 1: Abformung reinigen.</span></div>`:"")+card("Aufgaben direkt anlegen",`<p class="muted">Ein Klick legt die Aufgabe in der Aufgaben-App an – mit Kunde, Telefon und Gerät verknüpft.</p>
   <div class="quick">${quick.map(([id,l,t,c])=>{const done=S.tasks.find(x=>x.id===id);return `<button type="button" class="qbtn" data-task="${id}" data-title="${esc(t)}" data-cat="${c}" ${done?"disabled":""}>${done?"✓ ":"+ "}${l}</button>`}).join("")}</div>
-  ${S.tasks.length?`<div class="tlist">${S.tasks.map(t=>`<div><span class="tile t-kunden">✓</span><div><b>${esc(t.title)}</b><small>${esc(t.cat)} · fällig ${esc(t.due)} · erscheint in „Aufgaben“</small></div></div>`).join("")}</div>`:""}`)+
+  ${freeTaskForm()}
+  ${S.tasks.length?`<div class="tlist">${S.tasks.map(t=>`<div><span class="tile t-kunden">✓</span><div><b>${esc(t.title)}</b><small>${esc(t.cat)} · fällig ${esc(t.due)}${t.who?" · "+esc(t.who):""} · erscheint in „Aufgaben“</small></div></div>`).join("")}</div>`:""}`)+
  termineCard()+
  card("Broschüre für den Kunden",`<div class="brochure"><div class="bthumb"><span>Hörakustik Daugsch</span><b>Ihre persönliche Hörberatung</b><small>${esc(n)}</small></div>
   <div><p>Die Broschüre fasst alles zusammen: Hörsituation, Audiogramm, Hörprofil, Wünsche und Hörziele, Empfehlung mit Leistungsprofil, Preisorientierung und die Übersicht aller sechs Technikstufen – gestaltet für den Druck auf A4.</p>
@@ -470,13 +489,16 @@ function newConsultation(){AK.q="";AK.res=null;AK.audios=null;AK.upcoming=null;S
 
 /* ---------- Aufgaben & Labor ---------- */
 const isoD=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-async function createTask(kind,title,cat){
- const dev=DEVICES.find(d=>d.id===S.device),due=new Date();due.setDate(due.getDate()+(kind==="call"?2:1));
- const t={id:uid(),title,category:cat,assignee:H().me?.id||null,due:isoD(due),priority:"normal",status:"offen",customer:name(),phone:S.kunde.tel||null,
-  manufacturer:kind==="reserve"&&dev?dev.m:null,model:kind==="reserve"&&dev?dev.model:null,notes:`Aus der Beratung vom ${new Date().toLocaleDateString("de-DE")}`,consultation_id:cid,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
- const{error}=await H().sb.from("tasks").insert(t);
- if(error){toast("Aufgabe nicht angelegt: "+error.message);return}
- S.tasks.push({id:kind,title,cat,taskId:t.id,due:due.toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"})});toast("Aufgabe angelegt");changed();H().rerender();
+async function createTask(kind,title,cat,opt={}){
+ const dev=DEVICES.find(d=>d.id===S.device);let due=new Date();due.setDate(due.getDate()+(kind==="call"?2:1));if(opt.due)due=new Date(opt.due+"T12:00");
+ const assignee=opt.assignee!==undefined?opt.assignee||"":H().me?.id||"";
+ // über die zentrale Speicherfunktion der Aufgaben-App: erscheint sofort in der Liste und wird live verteilt
+ const t={id:uid(),title,category:cat,assignee,due:isoD(due),priority:opt.priority||"normal",status:"offen",customer:name(),phone:S.kunde.tel||"",
+  manufacturer:kind==="reserve"&&dev?dev.m:"",model:kind==="reserve"&&dev?dev.model:"",notes:[opt.notes,`Aus der Beratung vom ${new Date().toLocaleDateString("de-DE")}`].filter(Boolean).join(" · "),consultationId:cid,createdAt:Date.now()};
+ const ok=await H().saveTask(t,null);
+ if(!ok){toast("Aufgabe nicht angelegt");return false}
+ S.tasks.push({id:kind,title,cat,taskId:t.id,who:opt.assignee!==undefined?(H().team().find(m=>m.id===assignee)||{}).name||"":"",due:due.toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"})});toast("Aufgabe angelegt");changed();H().rerender();
+ return true;
 }
 async function sendLab(){
  const o=S.oto;if(!name()||name()==="Neuer Kunde"){toast("Bitte zuerst den Kundennamen eintragen");step=0;H().rerender();return}
@@ -780,6 +802,8 @@ document.addEventListener("click",e=>{
  if(d.dev){S.device=d.dev;S.otos=-1;changed();rr();return}
  if(d.otos!=null){S.otos=Number(d.otos);changed();rr();return}
  if(d.task){createTask(d.task,d.title,d.cat);return}
+ if(d.ftcreate!=null){freeTaskCreate();return}
+ if(d.ftprio!=null){S.ft=S.ft||{};S.ft.prio=S.ft.prio==="hoch"?"normal":"hoch";changed();rr();return}
  if(d.otosame!=null){S.oto.same=d.otosame==="1";if(!S.oto.same)S.oto.L=JSON.parse(JSON.stringify(S.oto.R));changed();rr();return}
  if(d.akpick){akPick(d.akpick);return}
  if(d.tftype){const ty=(AK.meta&&AK.meta.types||[]).find(x=>x.id===d.tftype);S.tf=S.tf||{};S.tf.typeId=d.tftype;if(ty)S.tf.minutes=ty.minutes;changed();rr();return}
