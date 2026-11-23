@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.7.2 · Ausweich-Server";
+const VERSION="1.8.0 · AkuWin: Kunde & Audiogramm";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};

@@ -109,14 +109,54 @@ function audioSvg(big=false){
 }
 
 /* ---------- Schritte ---------- */
+/* ---------- AkuWin ---------- */
+const AK={q:"",loading:false,res:null,err:"",audios:null,audLoading:false};
+const fmtD=d=>d?new Date(d+"T12:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"}):"";
+async function akInvoke(body){const r=await H().sb.functions.invoke("akuwin",{body});if(r.error){let m=String(r.error.message||r.error);try{const j=await r.error.context.json();m=j.error||m}catch{}throw new Error(m)}if(r.data&&r.data.error)throw new Error(r.data.error);return r.data}
+let akT=null;
+function akSearch(q){AK.q=q;clearTimeout(akT);if(q.trim().length<2){AK.res=null;AK.err="";paintAk();return}
+ akT=setTimeout(async()=>{AK.loading=true;paintAk();try{const d=await akInvoke({action:"clients",q:q.trim()});if(AK.q===q){AK.res=d.clients||[];AK.err=""}}catch(e){AK.err=e.message;AK.res=null}AK.loading=false;paintAk()},350)}
+function akResHtml(){
+ if(AK.loading)return '<p class="muted">Suche in AkuWin …</p>';
+ if(AK.err)return `<p class="akerr">AkuWin: ${esc(AK.err)}</p>`;
+ if(!AK.res)return "";
+ if(!AK.res.length)return '<p class="muted">Kein Kunde gefunden. Tipp: nur den Nachnamen oder den Anfang eingeben.</p>';
+ return `<div class="akres">${AK.res.map(c=>`<button type="button" class="akhit" data-akpick="${c.id}"><b>${esc(c.last)}, ${esc(c.first)}</b><span>${c.birthday?"geb. "+fmtD(c.birthday):""}${c.city?" · "+esc(c.city):""}${c.lastVisit?" · zuletzt "+fmtD(c.lastVisit):""}</span></button>`).join("")}</div>`;
+}
+function paintAk(){const el=$("akres");if(el)el.innerHTML=akResHtml()}
+function akCard(){
+ if(S.kunde.akuwinId)return `<div class="aklinked"><span class="akdot"></span><div><b>Mit AkuWin verknüpft</b><small>Kunden-Nr. ${esc(S.kunde.akuwinId)}${S.audioSrc?" · Audiogramm vom "+esc(fmtD(S.audioSrc.date)):""}</small></div><button type="button" class="btn" data-akreload>Audiogramm neu laden</button><button type="button" class="linkbtn" data-akunlink>Verknüpfung lösen</button></div>`;
+ return card("Aus AkuWin übernehmen",`<label class="aksearch"><input id="akq" type="search" autocomplete="off" placeholder="Kunde suchen – z. B. Müller oder Anna Müller" value="${esc(AK.q)}"></label><div id="akres">${akResHtml()}</div><p class="muted">Stammdaten und das neueste Audiogramm werden automatisch übernommen.</p>`);
+}
+function applyAudiogram(a){
+ const pick=src=>{const o={};FREQ.forEach(f=>{if(src[f]!=null)o[f]=src[f]});return o};
+ S.audio={R:pick(a.ac.R||{}),L:pick(a.ac.L||{})};S.audioBC={R:pick(a.bc.R||{}),L:pick(a.bc.L||{})};S.audioSrc={guid:a.guid,date:a.date,from:"AkuWin"};
+}
+async function akLoadAudios(choose){
+ if(!S.kunde.akuwinId)return;AK.audLoading=true;rr();
+ try{const d=await akInvoke({action:"audiograms",clientId:S.kunde.akuwinId});AK.audios=d.audiograms||[];AK.audLoading=false;
+  if(!AK.audios.length){toast("In AkuWin ist für diesen Kunden kein Audiogramm hinterlegt");rr();return}
+  if(choose){const hasManual=["R","L"].some(e=>Object.values(S.audio[e]||{}).some(v=>v!=null&&v!==""));
+   if(hasManual&&!S.audioSrc&&!await H().ask("Audiogramm ersetzen?","Die von Hand eingetragenen Werte werden durch das Audiogramm aus AkuWin ersetzt.","Ersetzen")){rr();return}
+   applyAudiogram(AK.audios[0]);changed();toast("Audiogramm vom "+fmtD(AK.audios[0].date)+" übernommen")}
+  rr();
+ }catch(e){AK.audLoading=false;toast("AkuWin: "+e.message);rr()}
+}
+async function akPick(id){
+ const c=(AK.res||[]).find(x=>String(x.id)===String(id));if(!c)return;const k=S.kunde;
+ k.akuwinId=c.id;k.anrede=c.salutation==="Frau"||c.salutation==="Herr"?c.salutation:k.anrede;k.vorname=c.first;k.nachname=c.last;
+ if(c.birthday)k.geb=c.birthday;if(c.phone)k.tel=c.phone;if(c.email)k.mail=c.email;if(c.insured&&!k.kasse)k.kasse="gkv";
+ if(c.street||c.city)k.adresse=[c.street,[c.zip,c.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+ AK.q="";AK.res=null;changed();toast("Kunde aus AkuWin übernommen");await akLoadAudios(true);
+}
 function stepKunde(){
  const k="kunde";
- return card("Kunde",`<div class="q"><span class="ql">Anrede</span>${chips(k+".anrede",["Frau","Herr","neutral"])}</div><div class="form">${inp(k+".vorname","Vorname")}${inp(k+".nachname","Nachname")}${inp(k+".geb","Geburtsdatum","date")}${inp(k+".tel","Telefon","tel")}${inp(k+".mail","E-Mail","email","","full")}</div>`)+
+ return akCard()+card("Kunde",`<div class="q"><span class="ql">Anrede</span>${chips(k+".anrede",["Frau","Herr","neutral"])}</div><div class="form">${inp(k+".vorname","Vorname")}${inp(k+".nachname","Nachname")}${inp(k+".geb","Geburtsdatum","date")}${inp(k+".tel","Telefon","tel")}${inp(k+".mail","E-Mail","email","","full")}</div>`)+
  card("Krankenversicherung",`<div class="q"><span class="ql">Versicherung</span><div class="chips"><button type="button" class="chip" data-set="kunde.kasse" data-v="gkv" aria-pressed="${S.kunde.kasse==="gkv"}">Gesetzlich</button><button type="button" class="chip" data-set="kunde.kasse" data-v="privat" aria-pressed="${S.kunde.kasse==="privat"}">Privat</button></div></div>
   <div class="form">${inp(k+".kk","Krankenkasse","text","z. B. AOK, TK, Barmer","full")}</div>
   ${yn(k+".verordnung","Ärztliche Verordnung liegt vor",`<div class="form">${inp(k+".vdatum","Datum der Verordnung","date")}${inp(k+".hno","HNO-Arzt")}</div>`)}`)+
  card("Versorgung",`<div class="q"><span class="ql">Art</span>${chips("kunde.versorgung",["erst","Folgeversorgung"]).replace(">erst<",">Erstversorgung<")}</div>
-  <p class="muted">Später: Kunde direkt aus AkuWin übernehmen – Stammdaten und Audiogramm werden automatisch geladen.</p>`);
+`);
 }
 function stepAnamnese(){
  const a="an";
@@ -142,7 +182,8 @@ function stepAnamnese(){
 function stepAudio(){
  const row=e=>`<tr><th><span class="ear ${e}">${e==="R"?"Rechts ○":"Links ×"}</span></th>${FREQ.map(f=>`<td><input inputmode="numeric" data-aud="${e}.${f}" value="${esc(S.audio[e][f]??"")}" aria-label="${e==="R"?"Rechts":"Links"} ${f} Hz"></td>`).join("")}</tr>`;
  const dR=degree(pta("R")),dL=degree(pta("L"));
- return card("Tonaudiogramm (Luftleitung)",`<div class="audtop"><button class="btn" disabled>Aus AkuWin laden <span class="soon">bald</span></button><span class="muted">Werte in dB HL eintragen – die Grafik zeichnet sich live.</span></div>
+ return card("Tonaudiogramm (Luftleitung)",`<div class="audtop">${S.kunde.akuwinId?`<button class="btn primary" data-akload ${AK.audLoading?"disabled":""}>${AK.audLoading?"Lädt …":"Aus AkuWin laden"}</button>`:`<button class="btn" data-step="0">Aus AkuWin laden</button>`}<span class="muted">${S.audioSrc?`Aus AkuWin · Messung vom ${esc(fmtD(S.audioSrc.date))}`:S.kunde.akuwinId?"Werte in dB HL eintragen oder aus AkuWin laden.":"Erst in Schritt 1 den Kunden aus AkuWin übernehmen – oder Werte in dB HL eintragen."}</span></div>
+  ${AK.audios&&AK.audios.length>1?`<div class="q"><span class="ql">Messungen in AkuWin</span><div class="chips">${AK.audios.map(a=>`<button type="button" class="chip" data-akaud="${esc(a.guid)}" aria-pressed="${S.audioSrc&&S.audioSrc.guid===a.guid}">${esc(fmtD(a.date))}</button>`).join("")}</div></div>`:""}
   <div class="scroll"><table class="audt"><thead><tr><th></th>${FREQ.map(f=>`<th>${f>=1000?f/1000+" kHz":f+" Hz"}</th>`).join("")}</tr></thead><tbody>${row("R")}${row("L")}</tbody></table></div>
   <div id="audchart">${audioSvg()}</div>
   <div class="degrees"><div><span class="ear R">Rechts</span><b>${dR?esc(dR):"–"}</b><small>${pta("R")!=null?"Mittelwert "+Math.round(pta("R"))+" dB":""}</small></div><div><span class="ear L">Links</span><b>${dL?esc(dL):"–"}</b><small>${pta("L")!=null?"Mittelwert "+Math.round(pta("L"))+" dB":""}</small></div></div>`);
@@ -274,7 +315,7 @@ async function openConsultation(id){
  const r=await H().sb.from("consultations").select("*").eq("id",id).maybeSingle();
  if(r.error||!r.data){toast("Beratung konnte nicht geladen werden");return}
  S=Object.assign(empty(),r.data.data||{});S.kunde=Object.assign(empty().kunde,S.kunde||{});S.an=Object.assign(empty().an,S.an||{});S.oto=Object.assign(empty().oto,S.oto||{});
- cid=id;mode="edit";step=0;customer=false;H().rerender();window.scrollTo(0,0);
+ AK.q="";AK.res=null;AK.audios=null;cid=id;mode="edit";step=0;customer=false;H().rerender();window.scrollTo(0,0);
 }
 async function delConsultation(id){
  const x=(list||[]).find(c=>c.id===id),n=x&&x.customer_name||"ohne Namen";
@@ -283,7 +324,7 @@ async function delConsultation(id){
  if(error){toast("Löschen fehlgeschlagen: "+error.message);return}
  list=list.filter(c=>c.id!==id);H().rerender();toast("Beratung gelöscht");
 }
-function newConsultation(){S=empty();cid=uid();mode="edit";step=0;customer=false;dirty=false;H().rerender();window.scrollTo(0,0)}
+function newConsultation(){AK.q="";AK.res=null;AK.audios=null;S=empty();cid=uid();mode="edit";step=0;customer=false;dirty=false;H().rerender();window.scrollTo(0,0)}
 
 /* ---------- Aufgaben & Labor ---------- */
 const isoD=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -591,6 +632,10 @@ document.addEventListener("click",e=>{
  if(d.otos!=null){S.otos=Number(d.otos);changed();rr();return}
  if(d.task){createTask(d.task,d.title,d.cat);return}
  if(d.otosame!=null){S.oto.same=d.otosame==="1";if(!S.oto.same)S.oto.L=JSON.parse(JSON.stringify(S.oto.R));changed();rr();return}
+ if(d.akpick){akPick(d.akpick);return}
+ if(d.akload!=null||d.akreload!=null){akLoadAudios(true);return}
+ if(d.akaud){const a=(AK.audios||[]).find(x=>x.guid===d.akaud);if(a){applyAudiogram(a);changed();rr();toast("Audiogramm vom "+fmtD(a.date)+" übernommen")}return}
+ if(d.akunlink!=null){delete S.kunde.akuwinId;S.audioSrc=null;AK.audios=null;changed();rr();return}
  if(d.otowho!=null){const cur=S.oto.assignee===undefined?H().me?.id:S.oto.assignee;S.oto.assignee=cur===d.otowho?null:d.otowho;changed();rr();return}
  if(d.otosend!=null){sendLab();return}
  if(d.brochure!=null){saveNow();openBrochure();return}
@@ -602,10 +647,11 @@ document.addEventListener("click",e=>{
 document.addEventListener("input",e=>{
  if(!active()||KUNDE)return;const t=e.target;
  if(t.id==="bq"){q=t.value;H().rerender();const i=$("bq");i.focus();i.setSelectionRange(i.value.length,i.value.length);return}
+ if(t.id==="akq"){akSearch(t.value);return}
  if(mode!=="edit")return;
  if(t.dataset.in){set(t.dataset.in,t.dataset.num!=null?Number(t.value):t.value);if(t.type==="range"){const lb=t.closest("label").querySelector("b");if(lb)lb.textContent=t.value}
   if(t.dataset.in.startsWith("kunde.")){const c=document.querySelector(".crumb b");if(c)c.textContent=name()}changed();return}
- if(t.dataset.aud){const[e2,f]=t.dataset.aud.split(".");const v=t.value.trim();S.audio[e2][f]=v===""?undefined:Number(v);$("audchart").innerHTML=audioSvg();
+ if(t.dataset.aud){const[e2,f]=t.dataset.aud.split(".");const v=t.value.trim();S.audio[e2][f]=v===""?undefined:Number(v);if(S.audioSrc)S.audioSrc.edited=true;$("audchart").innerHTML=audioSvg();
   const dg=document.querySelectorAll(".degrees b");if(dg.length===2){dg[0].textContent=degree(pta("R"))||"–";dg[1].textContent=degree(pta("L"))||"–"}changed()}
 });
 document.addEventListener("change",e=>{if(!active()||KUNDE||mode!=="edit")return;if(e.target.dataset.in&&e.target.tagName==="SELECT")rr()});
