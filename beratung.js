@@ -210,8 +210,10 @@ function freeSlots(){
   const appts=AK.busy.filter(a=>a.start.slice(0,10)<=day&&a.end.slice(0,10)>=day&&a.state!=="Cancelled"&&(!a.resources.length||a.resources.includes(res)||a.resources.some(r=>rooms.includes(r))));
   if(appts.some(a=>a.allDay))continue;
   const busy=appts.map(a=>[a.start.slice(0,10)<day?0:minOf(a.start),a.end.slice(0,10)>day?1440:minOf(a.end)]);
+  // bereits vorgemerkte Termine (gleiche Ressource) gelten als belegt – außer der Slot selbst, damit er abwählbar bleibt
+  plan().filter(p=>p.date===day&&(p.res===res||t.room!==false)).forEach(p=>{const s=Number(p.time.slice(0,2))*60+Number(p.time.slice(3,5));busy.push([s,s+p.minutes,p.time])});
   const slots=[];
-  for(let m=oh[0];m+dur<=oh[1];m+=15){if(i===0&&m<nowM+30)continue;if(busy.some(([s,e])=>m<e&&m+dur>s))continue;slots.push(m)}
+  for(let m=oh[0];m+dur<=oh[1];m+=15){if(i===0&&m<nowM+30)continue;const hm2=hhmm(m);if(busy.some(([s,e,own])=>own!==hm2&&m<e&&m+dur>s))continue;slots.push(m)}
   if(slots.length)out.push({day,date:d,slots});
  }
  return out;
@@ -224,7 +226,7 @@ function slotsHtml(){
  if(!AK.busy)return `<p class="akerr">Freie Zeiten konnten nicht geladen werden${AK.busyErr?": "+esc(AK.busyErr):""}.</p>`;
  const f=freeSlots()||[],t=S.tf||{};
  if(!f.length)return `<p class="muted">In den nächsten ${AK.days} Tagen ist für ${resLabel(t.res)} kein passender Zeitraum frei.</p><button type="button" class="linkbtn" data-tfmore>14 Tage weiter suchen</button>`;
- return `<div class="slots">${f.slice(0,8).map(g=>`<div class="sday"><b>${esc(g.date.toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"}))}</b><div class="schips">${g.slots.filter((m,i,a)=>i===0||m-a[i-1]>=30||m%30===0).slice(0,8).map(m=>`<button type="button" class="chip schip" data-tfslot="${g.day}T${hhmm(m)}" aria-pressed="${t.date===g.day&&t.time===hhmm(m)}">${hhmm(m)}</button>`).join("")}</div></div>`).join("")}</div>
+ return `<div class="slots">${f.slice(0,8).map(g=>`<div class="sday"><b>${esc(g.date.toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"}))}<small class="indays">${inDays(g.day)}</small></b><div class="schips">${g.slots.filter((m,i,a)=>i===0||m-a[i-1]>=30||m%30===0).slice(0,8).map(m=>`<button type="button" class="chip schip" data-tfslot="${g.day}T${hhmm(m)}" aria-pressed="${plan().some(p=>p.date===g.day&&p.time===hhmm(m))}">${hhmm(m)}</button>`).join("")}</div></div>`).join("")}</div>
   <button type="button" class="linkbtn" data-tfmore>Weitere Tage anzeigen</button>`;
 }
 function termineCard(){
@@ -247,21 +249,39 @@ function termineCard(){
    <div class="freeslots"><h4>Freie Termine <small class="muted">${esc(String(t.minutes))} Min. · ${esc(resLabel(t.res))} · zu den Öffnungszeiten</small></h4>
     ${(AK.meta.resources||[]).some(x=>x.type!=="Employee")&&(AK.meta.resources.find(x=>x.id===t.res)||{}).type==="Employee"?`<div class="chips" style="margin-bottom:8px"><button type="button" class="chip" data-tfroom aria-pressed="${t.room!==false}">${esc((AK.meta.resources.filter(x=>x.type!=="Employee").map(x=>x.name)).join(" / "))} muss frei sein</button></div>`:""}${slotsHtml()}</div>
    <div class="form">${inp("tf.note","Notiz für AkuWin","text","z. B. Erstanpassung, Hörsysteme mitbringen","full")}</div>
-   <div class="nav2"><span class="muted">Der Termin wird sofort in AkuWin eingetragen und erscheint im Kalender und in der Broschüre.</span><button class="btn primary" data-tfcreate ${AK.creating?"disabled":""}>${AK.creating?"Wird angelegt …":"Termin in AkuWin anlegen"}</button></div></div>`);
+   <div class="nav2"><span class="muted">Freie Zeit oben antippen – oder Datum/Uhrzeit eintragen und vormerken.</span><button class="btn" data-tfreserve>+ Vormerken</button></div>
+   ${plan().length?`<div class="tplanned"><h4>Vorgemerkt <small class="muted">${plan().length} · noch nicht in AkuWin</small></h4>
+    ${plan().map((p,i)=>`<div class="trow"><span class="tdot" style="background:${esc(p.color||"#E6EEEA")}"></span><b>${esc(termDate(p.date+"T"))}</b><span>${p.time} Uhr · ${p.minutes} Min.</span><span>${esc(p.type)} <small class="muted">· ${inDays(p.date)}</small></span><span class="muted">${esc(resLabel(p.res))} <button type="button" class="delx sm" data-tfunplan="${i}" aria-label="Vormerkung entfernen">×</button></span></div>`).join("")}
+    <div class="nav2"><span class="muted">Mit dem Kunden abstimmen – nach seinem OK werden alle vorgemerkten Termine in AkuWin eingetragen.</span><button class="btn primary" data-tfcreate ${AK.creating?"disabled":""}>${AK.creating?"Wird angelegt …":plan().length===1?"Termin in AkuWin anlegen":"Alle "+plan().length+" Termine in AkuWin anlegen"}</button></div></div>`:""}</div>`);
 }
-async function tfCreate(){
- const t=tfDefaults(),m=AK.meta;const ty=m.types.find(x=>x.id===t.typeId);
- if(!ty){toast("Bitte einen Termintyp wählen");return}if(!t.date||!t.time){toast("Bitte Datum und Uhrzeit wählen");return}
- const local=new Date(t.date+"T"+t.time+":00");if(isNaN(local))return;
- if(local<new Date()){toast("Der Termin liegt in der Vergangenheit");return}
- const o=-local.getTimezoneOffset(),off=(o>=0?"+":"-")+String(Math.floor(Math.abs(o)/60)).padStart(2,"0")+":"+String(Math.abs(o)%60).padStart(2,"0");
- const start=t.date+"T"+t.time+":00"+off;
- const txt=`${ty.name} am ${local.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})} um ${t.time} Uhr (${t.minutes} Min.) bei ${resLabel(t.res)} für ${name()}.`;
- if(!await H().ask("Termin in AkuWin anlegen?",txt,"Anlegen"))return;
- AK.creating=true;rr();
- try{await akInvoke({action:"createAppointment",clientId:S.kunde.akuwinId,typeId:ty.id,start,minutes:Number(t.minutes),resourceIds:[t.res],note:t.note||""});
-  toast("Termin in AkuWin angelegt");S.tf={typeId:t.typeId,res:t.res,minutes:t.minutes};AK.creating=false;AK.busy=null;await akUpcoming(true);window.HD_KALENDER&&window.HD_KALENDER.load(true,local);
- }catch(e){AK.creating=false;rr();await H().ask("Termin nicht angelegt",e.message,"OK",true)}
+/* Vormerken: mehrere Termine sammeln, nach OK des Kunden gesammelt in AkuWin anlegen */
+const plan=()=>S.tfPlan||(S.tfPlan=[]);
+const offOf=d=>{const o=-d.getTimezoneOffset();return (o>=0?"+":"-")+String(Math.floor(Math.abs(o)/60)).padStart(2,"0")+":"+String(Math.abs(o)%60).padStart(2,"0")};
+const inDays=day=>{const a=new Date();a.setHours(12,0,0,0);const b=new Date(day+"T12:00");const n=Math.round((b-a)/864e5);return n===0?"heute":n===1?"morgen":"in "+n+" Tagen"};
+function tfReserve(date,time){
+ const t=tfDefaults(),m=AK.meta,ty=m.types.find(x=>x.id===t.typeId);
+ if(!ty){toast("Bitte einen Termintyp wählen");return}
+ const d=date||t.date,tm=time||t.time;if(!d||!tm){toast("Bitte Datum und Uhrzeit wählen");return}
+ if(new Date(d+"T"+tm+":00")<new Date()){toast("Der Termin liegt in der Vergangenheit");return}
+ const i=plan().findIndex(p=>p.date===d&&p.time===tm&&p.res===t.res);
+ if(i>=0){plan().splice(i,1);changed();rr();return}
+ plan().push({date:d,time:tm,typeId:ty.id,type:ty.name,color:ty.color,minutes:Number(t.minutes),res:t.res,note:t.note||""});
+ plan().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));changed();rr();
+}
+async function tfCreateAll(){
+ const P=plan();if(!P.length)return;
+ const lines=P.map(p=>`• ${new Date(p.date+"T12:00").toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"})} ${p.time} Uhr – ${p.type} (${p.minutes} Min.) bei ${resLabel(p.res)}`).join("\n");
+ if(!await H().ask(P.length===1?"Termin in AkuWin anlegen?":P.length+" Termine in AkuWin anlegen?",`Für ${name()}:\n${lines}`,"Anlegen"))return;
+ AK.creating=true;rr();const fail=[];let ok=0;
+ for(const p of P.slice()){
+  const local=new Date(p.date+"T"+p.time+":00");
+  try{await akInvoke({action:"createAppointment",clientId:S.kunde.akuwinId,typeId:p.typeId,start:p.date+"T"+p.time+":00"+offOf(local),minutes:p.minutes,resourceIds:[p.res],note:p.note});
+   ok++;S.tfPlan=plan().filter(x=>x!==p);
+  }catch(e){fail.push(`${p.date} ${p.time}: ${e.message}`)}
+ }
+ AK.creating=false;AK.busy=null;changed();await akUpcoming(true);window.HD_KALENDER&&window.HD_KALENDER.load(true);
+ if(fail.length)await H().ask(ok?`${ok} angelegt, ${fail.length} nicht`:"Termine nicht angelegt",fail.join("\n"),"OK",true);
+ else toast(ok===1?"Termin in AkuWin angelegt":ok+" Termine in AkuWin angelegt");
 }
 function stepKunde(){
  const k="kunde";
@@ -760,8 +780,10 @@ document.addEventListener("click",e=>{
  if(d.akpick){akPick(d.akpick);return}
  if(d.tftype){const ty=(AK.meta&&AK.meta.types||[]).find(x=>x.id===d.tftype);S.tf=S.tf||{};S.tf.typeId=d.tftype;if(ty)S.tf.minutes=ty.minutes;changed();rr();return}
  if(d.tfres){S.tf=S.tf||{};S.tf.res=d.tfres;changed();rr();return}
- if(d.tfcreate!=null){tfCreate();return}
- if(d.tfslot){const [dd,tt]=d.tfslot.split("T");S.tf=S.tf||{};S.tf.date=dd;S.tf.time=tt;changed();rr();return}
+ if(d.tfcreate!=null){tfCreateAll();return}
+ if(d.tfreserve!=null){tfReserve();return}
+ if(d.tfunplan!=null){plan().splice(Number(d.tfunplan),1);changed();rr();return}
+ if(d.tfslot){const [dd,tt]=d.tfslot.split("T");tfReserve(dd,tt);return}
  if(d.tfroom!=null){S.tf=S.tf||{};S.tf.room=S.tf.room===false;changed();rr();return}
  if(d.tfmore!=null){AK.days+=14;AK.busy=null;rr();return}
  if(d.akload!=null||d.akreload!=null){akLoadAudios(true);return}
