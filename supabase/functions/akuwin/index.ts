@@ -4,7 +4,7 @@
 //   die Verbindung über den SHA-256-Fingerabdruck des Zertifikats abgesichert (Pinning):
 //   Zugangsdaten werden nur gesendet, wenn der Fingerabdruck exakt passt.
 // - Secrets (im Supabase-Dashboard → Edge Functions → Secrets):
-//     AKUWIN_URL          z. B. https://20155.ipnhosting.de:25850/akuwin-api
+//     AKUWIN_URL          z. B. https://20155.ipnhosting.de:25850 (Server-Wurzel, Routen beginnen mit /akuwin-api/v6/…)
 //     AKUWIN_USER         API-Benutzer
 //     AKUWIN_PASSWORD     Passwort (trägt der Inhaber selbst ein)
 //     AKUWIN_CERT_SHA256  Fingerabdruck des Server-Zertifikats (aus action "diag")
@@ -13,7 +13,7 @@ import { makeTLSClient, setCryptoImplementation } from "npm:@reclaimprotocol/tls
 import { webcryptoCrypto } from "npm:@reclaimprotocol/tls@0.1.5/webcrypto";
 setCryptoImplementation(webcryptoCrypto);
 
-const BASE = (Deno.env.get("AKUWIN_URL") ?? "https://20155.ipnhosting.de:25850/akuwin-api").replace(/\/+$/, "");
+const BASE = (Deno.env.get("AKUWIN_URL") ?? "https://20155.ipnhosting.de:25850").replace(/\/+$/, "");
 const PIN = (Deno.env.get("AKUWIN_CERT_SHA256") ?? "1F:7B:D7:DD:E7:EF:8C:12:13:8D:EF:88:55:0E:0B:EB:6B:C9:C8:99:05:45:71:1A:1B:88:4E:79:36:D9:FA:D5").replace(/[^0-9a-f]/gi, "").toLowerCase();
 const USER = Deno.env.get("AKUWIN_USER") ?? "";
 const PASS = Deno.env.get("AKUWIN_PASSWORD") ?? "";
@@ -255,6 +255,53 @@ Deno.serve(async (req) => {
         try { const r = await raw("GET", x, {}, undefined, false); res[x] = r.status + " " + (r.headers["content-type"] || "") + " " + (r.headers["location"] || "") + " " + text(r).slice(0, 120); } catch (e) { res[x] = String(e); }
       }));
       return json(res);
+    }
+    if (p.action === "clients") {
+      // Kundensuche: "Müller", "Mül", "Anna Müller" → nur die Felder, die die Beratung braucht
+      const q = String((p as { q?: unknown }).q || "").trim().replace(/[%*]/g, "");
+      if (q.length < 2) return json({ clients: [] });
+      const w = q.split(/\s+/).filter(Boolean);
+      const get = async (qs: string) => { const r = await raw("GET", "/akuwin-api/v6/clients?Take=25&" + qs, await authHeaders()); if (r.status !== 200) throw new Error("AkuWin-Kundensuche: " + r.status); return (JSON.parse(text(r)).Clients || []) as Record<string, unknown>[]; };
+      const e = encodeURIComponent;
+      let list: Record<string, unknown>[] = [];
+      if (w.length >= 2) {
+        list = await get(`FirstName=${e(w[0] + "%")}&LastName=${e(w.slice(1).join(" ") + "%")}`);
+        if (!list.length) list = await get(`FirstName=${e(w[w.length - 1] + "%")}&LastName=${e(w.slice(0, -1).join(" ") + "%")}`);
+      }
+      if (!list.length) list = await get(`LastName=${e(q + "%")}`);
+      if (!list.length && w.length === 1) list = await get(`FirstName=${e(q + "%")}`);
+      // deno-lint-ignore no-explicit-any
+      const clients = list.map((c: any) => ({ id: c.Id, first: c.FirstName || "", last: c.LastName || "", salutation: c.Salutation || "", birthday: (c.Birthday || "").slice(0, 10),
+        street: c.Address?.StreetAndNo || "", zip: c.Address?.ZIP || "", city: c.Address?.City || "",
+        phone: c.Communication?.HomeTelephone || c.Communication?.Mobile || c.Communication?.WorkTelephone || "", mobile: c.Communication?.Mobile || "", email: c.Communication?.Email || "",
+        insured: !!c.InsuranceId, lastVisit: (c.LastVisitDate || "").slice(0, 10) }))
+        .sort((a, b) => (a.last + a.first).localeCompare(b.last + b.first, "de"));
+      console.log(`[akuwin] ${user.email} Kundensuche (${clients.length} Treffer)`);
+      return json({ clients });
+    }
+    if (p.action === "audiograms") {
+      // Audiogramme eines Kunden, neueste zuerst; Luft- (ac) und Knochenleitung (bc) je Seite, nur beantwortete Punkte
+      const id = Number((p as { clientId?: unknown }).clientId);
+      if (!Number.isInteger(id) || id <= 0) return json({ error: "Ungültige Kunden-ID" }, 400);
+      const r = await raw("GET", `/akuwin-api/v6/clients/audiograms?Take=100&ClientId=${id}`, await authHeaders());
+      if (r.status !== 200) return json({ error: "AkuWin-Audiogramme: " + r.status }, 502);
+      // deno-lint-ignore no-explicit-any
+      const list = (JSON.parse(text(r)).Audiograms || []).filter((a: any) => a.ClientId === id).map((a: any) => {
+        const out: { guid: string; date: string; ac: Record<string, Record<string, number>>; bc: Record<string, Record<string, number>>; masked: Record<string, string[]> } = { guid: a.Guid, date: (a.DateOfMeasurement || "").slice(0, 10), ac: { R: {}, L: {} }, bc: { R: {}, L: {} }, masked: { R: [], L: [] } };
+        for (const t of a.ToneAudiograms || []) {
+          const side = t.Side === "Right" ? "R" : t.Side === "Left" ? "L" : null; if (!side) continue;
+          const tgt = t.MeasurementType === "BoneConduction" ? out.bc : t.MeasurementType === "AirConduction" ? out.ac : null; if (!tgt) continue;
+          for (const [k, v] of Object.entries(t)) {
+            if (!k.startsWith("Hz") || !v) continue;
+            // deno-lint-ignore no-explicit-any
+            const pt = (v as any).PointType, db = (v as any).dB;
+            if ((pt === "Answered" || pt === "Masked") && typeof db === "number") { tgt[side][k.slice(2)] = db; if (pt === "Masked") out.masked[side].push((tgt === out.bc ? "KL " : "LL ") + k.slice(2)); }
+          }
+        }
+        return out;
+      }).sort((x: { date: string }, y: { date: string }) => y.date.localeCompare(x.date));
+      console.log(`[akuwin] ${user.email} Audiogramme Kunde ${id} (${list.length})`);
+      return json({ audiograms: list });
     }
     if (p.action === "call") {
       // Lesender Zugriff auf erlaubte Pfade; schreibend nur, wenn ausdrücklich freigegeben
