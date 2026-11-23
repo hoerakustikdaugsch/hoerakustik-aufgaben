@@ -138,7 +138,7 @@ async function raw(method: string, path: string, headers: Record<string, string>
   const want = b64only(await certPem());
   const tcp = await Deno.connect({ hostname: u.hostname, port: Number(u.port) || 443 });
   const bodyBuf = body != null ? new TextEncoder().encode(body) : null;
-  const h: Record<string, string> = { Host: u.host, Connection: "close", Accept: "application/json", "User-Agent": "hd-portal/1", ...headers };
+  const h: Record<string, string> = { Host: Deno.env.get("AKUWIN_HOST_HEADER") || u.host, Connection: "close", Accept: "application/json", "User-Agent": "hd-portal/1", ...headers };
   if (bodyBuf) h["Content-Length"] = String(bodyBuf.length);
   const reqBytes = cat(new TextEncoder().encode(`${method} ${u.pathname}${u.search} HTTP/1.1\r\n` + Object.entries(h).map(([k, v]) => `${k}: ${v}`).join("\r\n") + "\r\n\r\n"), bodyBuf || new Uint8Array(0));
   return await new Promise<Raw>((resolve, reject) => {
@@ -242,7 +242,8 @@ Deno.serve(async (req) => {
       // ohne Zugangsdaten: zeigt Status/Kopfzeilen eines Pfads (z. B. um das Anmeldeverfahren zu erkennen)
       const path = String(p.path || "/");
       if (!(path.startsWith("/") || path.startsWith("~/")) || path.includes("..")) return json({ error: "Ungültiger Pfad" }, 400);
-      const r = await raw((p.method || "GET").toUpperCase(), path, p.body != null ? { "Content-Type": "application/json" } : {}, p.body != null ? JSON.stringify(p.body) : undefined, false);
+      const hostHdr = typeof (p as { host?: unknown }).host === "string" ? { Host: String((p as { host: string }).host) } : {};
+      const r = await raw((p.method || "GET").toUpperCase(), path, { ...hostHdr, ...(p.body != null ? { "Content-Type": "application/json" } : {}) }, p.body != null ? JSON.stringify(p.body) : undefined, false);
       return json({ status: r.status, headers: r.headers, body: text(r).slice(0, 3000) });
     }
     if (p.action === "scan") {
