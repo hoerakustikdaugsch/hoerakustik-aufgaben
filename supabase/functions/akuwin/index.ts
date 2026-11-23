@@ -129,6 +129,46 @@ Deno.serve(async (req) => {
       return json({ base: BASE, pinned: !!PIN, pinMatches: PIN && cert ? String((cert as { fingerprint256?: string }).fingerprint256 || "").replace(/[^0-9a-f]/gi, "").toLowerCase() === PIN : null,
         hasUser: !!USER, hasPassword: !!PASS, reach, cert });
     }
+    if (p.action === "diag2") {
+      // probiert verschiedene TLS-Wege (ohne Zugangsdaten) und meldet die genauen Fehler
+      const u = new URL(BASE);
+      const port = Number(u.port) || 443;
+      const out: Record<string, unknown> = {};
+      const req1 = `GET ${u.pathname}/swagger/index.html HTTP/1.1\r\nHost: ${u.host}\r\nConnection: close\r\n\r\n`;
+      const readAll = async (c: Deno.Conn) => { const buf = new Uint8Array(4096); const n = await c.read(buf); return new TextDecoder().decode(buf.slice(0, n || 0)).split("\r\n")[0]; };
+      // A: Deno.connectTls normal
+      try { const c = await Deno.connectTls({ hostname: u.hostname, port }); await c.write(new TextEncoder().encode(req1)); out.A = await readAll(c); c.close(); } catch (e) { out.A = String(e); }
+      // B: TCP + startTls mit Namen "localhost" (Zertifikat lautet auf localhost)
+      try { const t = await Deno.connect({ hostname: u.hostname, port }); const c = await Deno.startTls(t, { hostname: "localhost" }); await c.write(new TextEncoder().encode(req1)); out.B = await readAll(c); c.close(); } catch (e) { out.B = String(e); }
+      // C: node:https mit rejectUnauthorized:false
+      try {
+        const https = await import("node:https");
+        out.C = await new Promise((res) => {
+          const r = https.request({ host: u.hostname, port, path: u.pathname + "/swagger/index.html", method: "GET", rejectUnauthorized: false }, (resp) => {
+            // deno-lint-ignore no-explicit-any
+            const sock: any = resp.socket; let x509: unknown = null;
+            try { const c = sock.getPeerX509Certificate?.(); if (c) x509 = { fp: c.fingerprint256, subject: c.subject, issuer: c.issuer, validTo: c.validTo, pem: c.toString() }; } catch (e) { x509 = String(e); }
+            res({ status: resp.statusCode, x509 }); resp.resume();
+          });
+          r.on("error", (e) => res(String(e))); r.setTimeout(15000, () => { r.destroy(); res("timeout"); }); r.end();
+        });
+      } catch (e) { out.C = String(e); }
+      // D: node:tls, warten auf secureConnect, X509 auslesen
+      try {
+        out.D = await new Promise((res) => {
+          const s = tls.connect({ host: u.hostname, port, servername: u.hostname, rejectUnauthorized: false });
+          const to = setTimeout(() => { s.destroy(); res("timeout"); }, 15000);
+          s.on("secureConnect", () => {
+            // deno-lint-ignore no-explicit-any
+            const a: any = s; let x: unknown = null;
+            try { const c = a.getPeerX509Certificate?.(); if (c) x = { fp: c.fingerprint256, pem: c.toString() }; } catch (e) { x = String(e); }
+            res({ authorized: a.authorized, authError: String(a.authorizationError || ""), x509: x }); clearTimeout(to); s.destroy();
+          });
+          s.on("error", (e: Error) => { clearTimeout(to); res("error: " + String(e)); });
+        });
+      } catch (e) { out.D = String(e); }
+      return json(out);
+    }
     if (p.action === "swagger") {
       // öffentliche API-Beschreibung (ohne Zugangsdaten)
       const tries = ["/swagger/v1/swagger.json", "/swagger/swagger.json", "/swagger/docs/v1", "/swagger.json", "/openapi.json", "/swagger/v2/swagger.json"];
