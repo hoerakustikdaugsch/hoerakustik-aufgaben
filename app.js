@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.6.2 · Auto-Update";
+const VERSION="1.6.3 · Einladung & Passwort";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -32,7 +32,7 @@ const addDays=(n,base=new Date())=>{const d=new Date(base);d.setDate(d.getDate()
 const fmtDate=s=>{if(!s)return"";const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d).toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"})};
 const relDate=s=>{const T=iso(new Date());if(!s)return"";if(s===T)return"Heute";if(s===addDays(1))return"Morgen";if(s===addDays(-1))return"seit gestern";if(s<T)return"seit "+fmtDate(s);return fmtDate(s)};
 const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,10));
-const show=v=>["setupView","loginView","nameView","appView"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
+const show=v=>["setupView","loginView","pwView","nameView","appView"].forEach(x=>$(x).classList.toggle("hidden",x!==v));
 
 let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
 $("ver").textContent=VERSION;
@@ -311,6 +311,24 @@ $("loginForm").addEventListener("submit",async e=>{
  $("loginBtn").disabled=false;
  if(error)$("loginErr").textContent=/invalid/i.test(error.message)?"E-Mail oder Passwort stimmt nicht.":"Anmeldung fehlgeschlagen: "+error.message;
 });
+$("forgotBtn").onclick=async()=>{
+ const mail=$("l_mail").value.trim();$("loginErr").textContent="";$("loginOk").textContent="";
+ if(!mail){$("loginErr").textContent="Bitte oben zuerst deine E-Mail-Adresse eintragen.";$("l_mail").focus();return}
+ $("forgotBtn").disabled=true;
+ const{error}=await sb.auth.resetPasswordForEmail(mail,{redirectTo:location.origin+location.pathname});
+ $("forgotBtn").disabled=false;
+ if(error){$("loginErr").textContent=/rate|seconds/i.test(error.message)?"Bitte kurz warten und es dann noch einmal versuchen.":"Konnte keinen Link senden: "+error.message;return}
+ $("loginOk").textContent="Link ist unterwegs. Bitte die E-Mail auf diesem Gerät öffnen und auf den Link tippen.";
+};
+$("pwForm").addEventListener("submit",async e=>{
+ e.preventDefault();const a=$("pw1").value,b=$("pw2").value;$("pwErr").textContent="";
+ if(a.length<8){$("pwErr").textContent="Bitte mindestens 8 Zeichen.";return}
+ if(a!==b){$("pwErr").textContent="Die beiden Passwörter stimmen nicht überein.";return}
+ $("pwBtn").disabled=true;const{error}=await sb.auth.updateUser({password:a});$("pwBtn").disabled=false;
+ if(error){$("pwErr").textContent=/different|same/i.test(error.message)?"Bitte ein anderes Passwort als bisher wählen.":"Nicht gespeichert: "+error.message;return}
+ pwMode=null;$("pw1").value=$("pw2").value="";history.replaceState(null,"",location.pathname);
+ const{data}=await sb.auth.getSession();me=null;await onSession(data.session);toast("Passwort gespeichert");
+});
 const logout=async()=>{$("teamDlg").close();await sb.auth.signOut();try{localStorage.removeItem("hd_cache")}catch{}};
 $("logoutBtn").onclick=logout;$("logoutBtn2").onclick=logout;
 $("nameForm").addEventListener("submit",async e=>{e.preventDefault();const n=$("n_name").value.trim();if(!n)return;
@@ -320,6 +338,10 @@ $("nameForm").addEventListener("submit",async e=>{e.preventDefault();const n=$("
 
 async function onSession(session){
  if(!session){me=null;tasks=[];team=[];loaded=false;if(channel){sb.removeChannel(channel);channel=null}show("loginView");return}
+ if(pwMode){me=null;$("pw_user").value=session.user.email||"";
+  $("pwTitle").textContent=pwMode==="invite"?"Willkommen im Portal":"Neues Passwort";
+  $("pwText").textContent=pwMode==="invite"?"Lege jetzt dein persönliches Passwort fest. Damit meldest du dich künftig in der App auf allen Geräten an.":"Lege ein neues Passwort fest. Danach bist du direkt angemeldet.";
+  show("pwView");setTimeout(()=>$("pw1").focus(),50);return}
  if(me&&me.id===session.user.id)return;
  me={id:session.user.id,email:session.user.email};
  const c=ls.get("cache",null);if(c){tasks=c.tasks||[];team=c.team||[]}
@@ -329,11 +351,17 @@ async function onSession(session){
 }
 function enterApp(){show("appView");render();loadAll();subscribe();window.HD_PREISE&&window.HD_PREISE.load();window.HD_LABOR&&window.HD_LABOR.load();clearInterval(timer);timer=setInterval(render,60000)}
 
+/* Einladungs- und Passwort-Links: Art des Links merken, bevor supabase-js die Adresse aufräumt */
+const AUTH_HASH=new URLSearchParams((location.hash||"").replace(/^#/,""));
+const AUTH_QUERY=new URLSearchParams(location.search);
+let pwMode=["invite","recovery"].includes(AUTH_HASH.get("type"))?AUTH_HASH.get("type"):["invite","recovery"].includes(AUTH_QUERY.get("type"))?AUTH_QUERY.get("type"):null;
+const AUTH_ERR=AUTH_HASH.get("error_code")||AUTH_HASH.get("error")||AUTH_QUERY.get("error_code");
 function start(url,key){
  if(!window.supabase||!window.supabase.createClient){show("setupView");$("setupErr").textContent="Die Datenbank-Bibliothek konnte nicht geladen werden. Bitte Internetverbindung prüfen und neu laden.";return}
  sb=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true}});
  sb.auth.getSession().then(({data})=>onSession(data.session));
- sb.auth.onAuthStateChange((ev,session)=>{if(ev==="SIGNED_IN"||ev==="SIGNED_OUT")setTimeout(()=>onSession(session),0)});
+ sb.auth.onAuthStateChange((ev,session)=>{if(ev==="PASSWORD_RECOVERY")pwMode=pwMode||"recovery";if(ev==="SIGNED_IN"||ev==="SIGNED_OUT"||ev==="PASSWORD_RECOVERY")setTimeout(()=>onSession(session),0)});
+ if(AUTH_ERR){history.replaceState(null,"",location.pathname);setTimeout(()=>{$("loginErr").textContent=/expired|otp/i.test(AUTH_ERR)?"Der Link ist abgelaufen oder wurde schon benutzt. Unten auf „Passwort vergessen?“ tippen – dann kommt ein neuer Link per E-Mail.":"Der Link hat nicht funktioniert ("+AUTH_ERR+"). Bitte „Passwort vergessen?“ nutzen."},50)}
 }
 $("setupForm").addEventListener("submit",e=>{e.preventDefault();const u=$("s_url").value.trim().replace(/\/+$/,""),k=$("s_key").value.trim();
  if(!/^https:\/\/.+/.test(u)){$("setupErr").textContent="Die URL muss mit https:// beginnen.";return}

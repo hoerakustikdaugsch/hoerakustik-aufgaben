@@ -152,6 +152,7 @@ section.list.overdue h3{color:var(--hot)}
 .gate p{margin:0;color:var(--muted);font-size:15px}
 .gate .claim{letter-spacing:.06em;font-weight:600;color:var(--sage);font-size:14px}
 .gate .err{color:var(--hot);font-size:15px;min-height:1em}
+.gate .okmsg{color:var(--forest);font-weight:600;font-size:15px}.gate .okmsg:empty{display:none}
 label{display:grid;gap:4px;font-size:14px;font-weight:600;color:var(--muted)}
 input,select,textarea{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;font-size:16px;min-height:46px;font-weight:400;color:var(--ink);width:100%}
 textarea{min-height:84px;resize:vertical}
@@ -546,7 +547,19 @@ dialog.wide{width:min(860px,96vw)}
  <label>Passwort<input id="l_pw" type="password" autocomplete="current-password" required></label>
  <div class="err" id="loginErr"></div>
  <button class="btn primary" type="submit" id="loginBtn">Anmelden</button>
- <p>Zugang vergessen? Das Passwort kann in Supabase neu gesetzt werden.</p>
+ <button class="btn" type="button" id="forgotBtn">Passwort vergessen?</button>
+ <p class="okmsg" id="loginOk"></p>
+</form></div>
+
+<div class="gate hidden" id="pwView"><form class="box" id="pwForm">
+ <img class="glogo" src="img/logo.png" alt="Hörakustik Daugsch">
+ <h1 id="pwTitle">Passwort festlegen</h1>
+ <p id="pwText">Lege dein persönliches Passwort fest. Damit meldest du dich künftig auf allen Geräten an.</p>
+ <input type="email" id="pw_user" autocomplete="username" hidden>
+ <label>Neues Passwort<input id="pw1" type="password" autocomplete="new-password" minlength="8" required placeholder="mindestens 8 Zeichen"></label>
+ <label>Passwort wiederholen<input id="pw2" type="password" autocomplete="new-password" minlength="8" required></label>
+ <div class="err" id="pwErr"></div>
+ <button class="btn primary" type="submit" id="pwBtn">Passwort speichern</button>
 </form></div>
 
 <div class="gate hidden" id="nameView"><form class="box" id="nameForm">
