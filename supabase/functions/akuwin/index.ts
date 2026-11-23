@@ -373,7 +373,11 @@ Deno.serve(async (req) => {
       const endLocal = new Date(startMs + minutes * 60000 + offMin * 60000).toISOString().slice(0, 19) + (off === "Z" ? "Z" : off);
       const startNorm = new Date(startMs + offMin * 60000).toISOString().slice(0, 19) + (off === "Z" ? "Z" : off);
       const mandatorId = m.resources.find((x) => x.id === resIds[0])?.mandatorId ?? null;
-      const body: Record<string, unknown> = { Start: startNorm, Finish: endLocal, IsAllDay: false, TypeId: type.id, Note: String(q.note || "").slice(0, 500), ClientId: id, RessourceIds: resIds, IsConflictChecking: type.conflict, State: "Approved" };
+      // Kürzel des Anlegenden: aus der App (creator), sonst aus dem Ressourcennamen "Name (GD)", sonst Standard (Secret AKUWIN_CREATOR_CODE, Vorgabe GD)
+      const codeFromRes = (m.resources.find((x) => x.id === resIds[0])?.name || "").match(/\(([A-ZÄÖÜ]{1,4})\)/)?.[1];
+      const creatorIn = String((q as { creator?: unknown }).creator || "").toUpperCase().replace(/[^A-ZÄÖÜ]/g, "").slice(0, 4);
+      const creator = creatorIn || codeFromRes || Deno.env.get("AKUWIN_CREATOR_CODE") || "GD";
+      const body: Record<string, unknown> = { Start: startNorm, Finish: endLocal, IsAllDay: false, TypeId: type.id, Note: String(q.note || "").slice(0, 500), ClientId: id, RessourceIds: resIds, IsConflictChecking: type.conflict, State: "Approved", CreatorEmployeeCode: creator };
       if (mandatorId != null) body.MandatorId = mandatorId;
       const r = await raw("POST", "/akuwin-api/v6/appointments/nonrecurrent", { ...ah, "Content-Type": "application/json" }, JSON.stringify(body));
       const t = text(r);

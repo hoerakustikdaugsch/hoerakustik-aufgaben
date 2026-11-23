@@ -133,7 +133,7 @@ function audioSvg(big=false,ear=null,print=false){
 
 /* ---------- Schritte ---------- */
 /* ---------- AkuWin ---------- */
-const AK={q:"",loading:false,res:null,err:"",audios:null,audLoading:false,meta:null,metaLoading:false,upcoming:null,upLoading:false,creating:false};
+const AK={q:"",loading:false,res:null,err:"",audios:null,audLoading:false,meta:null,metaLoading:false,upcoming:null,upLoading:false,creating:false,busy:null,busyKey:"",busyLoading:false,days:14};
 const fmtD=d=>d?new Date(d+"T12:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"}):"";
 async function akInvoke(body){const r=await H().sb.functions.invoke("akuwin",{body});if(r.error){let m=String(r.error.message||r.error);try{const j=await r.error.context.json();m=j.error||m}catch{}throw new Error(m)}if(r.data&&r.data.error)throw new Error(r.data.error);return r.data}
 let akT=null;
@@ -189,6 +189,44 @@ function tfDefaults(){
  if(!t.date){const d=new Date();d.setDate(d.getDate()+7);if(d.getDay()===0)d.setDate(d.getDate()+1);if(d.getDay()===6)d.setDate(d.getDate()+2);t.date=d.toISOString().slice(0,10)}
  if(!t.time)t.time="10:00";if(!t.minutes)t.minutes=60;return t;
 }
+/* ---------- Freie Termine finden ---------- */
+// Öffnungszeiten (Mo=1 … Fr=5) in Minuten ab 0 Uhr
+const OPEN={1:[600,1020],2:[600,1020],3:[600,840],4:[600,1020],5:[600,840]};
+const ymdL=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const minOf=s=>Number(s.slice(11,13))*60+Number(s.slice(14,16));
+async function akBusy(force){
+ const from=new Date(),to=new Date();to.setDate(to.getDate()+AK.days);
+ const key=ymdL(from)+"|"+ymdL(to);if(!force&&AK.busyKey===key&&AK.busy)return;if(AK.busyLoading)return;
+ AK.busyLoading=true;
+ try{const d=await akInvoke({action:"appointments",from:ymdL(from),to:ymdL(to)});AK.busy=d.appointments||[];AK.busyKey=key}catch(e){AK.busy=null;AK.busyErr=e.message}
+ AK.busyLoading=false;rr();
+}
+function freeSlots(){
+ if(!AK.busy)return null;const t=S.tf||{},dur=Number(t.minutes)||60,res=t.res;const now=new Date(),nowM=now.getHours()*60+now.getMinutes();
+ const out=[];
+ for(let i=0;i<=AK.days;i++){const d=new Date();d.setDate(d.getDate()+i);const wd=d.getDay(),oh=OPEN[wd];if(!oh)continue;const day=ymdL(d);
+  // belegte Zeiten dieser Ressource (abgesagte zählen nicht); ganztägige Termine sperren den Tag
+  const rooms=t.room===false?[]:(AK.meta&&AK.meta.resources||[]).filter(x=>x.type!=="Employee").map(x=>x.id);
+  const appts=AK.busy.filter(a=>a.start.slice(0,10)<=day&&a.end.slice(0,10)>=day&&a.state!=="Cancelled"&&(!a.resources.length||a.resources.includes(res)||a.resources.some(r=>rooms.includes(r))));
+  if(appts.some(a=>a.allDay))continue;
+  const busy=appts.map(a=>[a.start.slice(0,10)<day?0:minOf(a.start),a.end.slice(0,10)>day?1440:minOf(a.end)]);
+  const slots=[];
+  for(let m=oh[0];m+dur<=oh[1];m+=15){if(i===0&&m<nowM+30)continue;if(busy.some(([s,e])=>m<e&&m+dur>s))continue;slots.push(m)}
+  if(slots.length)out.push({day,date:d,slots});
+ }
+ return out;
+}
+const hhmm=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+function slotsHtml(){
+ const key=ymdL(new Date())+"|"+(()=>{const x=new Date();x.setDate(x.getDate()+AK.days);return ymdL(x)})();
+ if((!AK.busy||AK.busyKey!==key)&&!AK.busyLoading)setTimeout(()=>akBusy(),0);
+ if(AK.busyLoading&&!AK.busy)return '<p class="muted">Freie Zeiten werden in AkuWin gesucht …</p>';
+ if(!AK.busy)return `<p class="akerr">Freie Zeiten konnten nicht geladen werden${AK.busyErr?": "+esc(AK.busyErr):""}.</p>`;
+ const f=freeSlots()||[],t=S.tf||{};
+ if(!f.length)return `<p class="muted">In den nächsten ${AK.days} Tagen ist für ${resLabel(t.res)} kein passender Zeitraum frei.</p><button type="button" class="linkbtn" data-tfmore>14 Tage weiter suchen</button>`;
+ return `<div class="slots">${f.slice(0,8).map(g=>`<div class="sday"><b>${esc(g.date.toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"}))}</b><div class="schips">${g.slots.filter((m,i,a)=>i===0||m-a[i-1]>=30||m%30===0).slice(0,8).map(m=>`<button type="button" class="chip schip" data-tfslot="${g.day}T${hhmm(m)}" aria-pressed="${t.date===g.day&&t.time===hhmm(m)}">${hhmm(m)}</button>`).join("")}</div></div>`).join("")}</div>
+  <button type="button" class="linkbtn" data-tfmore>Weitere Tage anzeigen</button>`;
+}
 function termineCard(){
  if(!S.kunde.akuwinId)return card("Folgetermine in AkuWin",`<div class="audtop"><button class="btn" data-step="0">Kunde aus AkuWin übernehmen</button><span class="muted">Termine können angelegt werden, sobald die Beratung mit einem AkuWin-Kunden verknüpft ist.</span></div>`);
  if(!AK.meta){setTimeout(akMeta,0);return card("Folgetermine in AkuWin",'<p class="muted">Termintypen werden aus AkuWin geladen …</p>')}
@@ -206,6 +244,8 @@ function termineCard(){
    <div class="form tgrid"><label>Datum<input type="date" data-in="tf.date" value="${esc(t.date)}"></label><label>Uhrzeit<input type="time" step="900" data-in="tf.time" value="${esc(t.time)}"></label>
     <label>Dauer<select data-in="tf.minutes" data-num>${durs.sort((a,b)=>a-b).map(d=>`<option value="${d}" ${Number(t.minutes)===d?"selected":""}>${d<60?d+" Min.":(d/60).toString().replace(".",",")+" Std."}</option>`).join("")}</select></label></div>
    <div class="q"><span class="ql">Bei</span><div class="chips">${resChips}</div></div>
+   <div class="freeslots"><h4>Freie Termine <small class="muted">${esc(String(t.minutes))} Min. · ${esc(resLabel(t.res))} · zu den Öffnungszeiten</small></h4>
+    ${(AK.meta.resources||[]).some(x=>x.type!=="Employee")&&(AK.meta.resources.find(x=>x.id===t.res)||{}).type==="Employee"?`<div class="chips" style="margin-bottom:8px"><button type="button" class="chip" data-tfroom aria-pressed="${t.room!==false}">${esc((AK.meta.resources.filter(x=>x.type!=="Employee").map(x=>x.name)).join(" / "))} muss frei sein</button></div>`:""}${slotsHtml()}</div>
    <div class="form">${inp("tf.note","Notiz für AkuWin","text","z. B. Erstanpassung, Hörsysteme mitbringen","full")}</div>
    <div class="nav2"><span class="muted">Der Termin wird sofort in AkuWin eingetragen und erscheint im Kalender und in der Broschüre.</span><button class="btn primary" data-tfcreate ${AK.creating?"disabled":""}>${AK.creating?"Wird angelegt …":"Termin in AkuWin anlegen"}</button></div></div>`);
 }
@@ -220,8 +260,8 @@ async function tfCreate(){
  if(!await H().ask("Termin in AkuWin anlegen?",txt,"Anlegen"))return;
  AK.creating=true;rr();
  try{await akInvoke({action:"createAppointment",clientId:S.kunde.akuwinId,typeId:ty.id,start,minutes:Number(t.minutes),resourceIds:[t.res],note:t.note||""});
-  toast("Termin in AkuWin angelegt");S.tf={typeId:t.typeId,res:t.res,minutes:t.minutes};AK.creating=false;await akUpcoming(true);window.HD_KALENDER&&window.HD_KALENDER.load(true,local);
- }catch(e){AK.creating=false;rr();await H().ask("Termin nicht angelegt",e.message,"OK")}
+  toast("Termin in AkuWin angelegt");S.tf={typeId:t.typeId,res:t.res,minutes:t.minutes};AK.creating=false;AK.busy=null;await akUpcoming(true);window.HD_KALENDER&&window.HD_KALENDER.load(true,local);
+ }catch(e){AK.creating=false;rr();await H().ask("Termin nicht angelegt",e.message,"OK",true)}
 }
 function stepKunde(){
  const k="kunde";
@@ -721,6 +761,9 @@ document.addEventListener("click",e=>{
  if(d.tftype){const ty=(AK.meta&&AK.meta.types||[]).find(x=>x.id===d.tftype);S.tf=S.tf||{};S.tf.typeId=d.tftype;if(ty)S.tf.minutes=ty.minutes;changed();rr();return}
  if(d.tfres){S.tf=S.tf||{};S.tf.res=d.tfres;changed();rr();return}
  if(d.tfcreate!=null){tfCreate();return}
+ if(d.tfslot){const [dd,tt]=d.tfslot.split("T");S.tf=S.tf||{};S.tf.date=dd;S.tf.time=tt;changed();rr();return}
+ if(d.tfroom!=null){S.tf=S.tf||{};S.tf.room=S.tf.room===false;changed();rr();return}
+ if(d.tfmore!=null){AK.days+=14;AK.busy=null;rr();return}
  if(d.akload!=null||d.akreload!=null){akLoadAudios(true);return}
  if(d.akaud){const a=(AK.audios||[]).find(x=>x.guid===d.akaud);if(a){applyAudiogram(a);changed();rr();toast("Audiogramm vom "+fmtD(a.date)+" übernommen")}return}
  if(d.akunlink!=null){delete S.kunde.akuwinId;if(S.audioSrc){S.audio={R:{},L:{}};S.audioBC=null}S.audioSrc=null;AK.audios=null;changed();rr();return}
