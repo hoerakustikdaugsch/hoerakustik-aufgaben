@@ -303,6 +303,31 @@ Deno.serve(async (req) => {
       console.log(`[akuwin] ${user.email} Audiogramme Kunde ${id} (${list.length})`);
       return json({ audiograms: list });
     }
+    if (p.action === "appointments") {
+      // Termine im Zeitraum (nur lesen) + Ressourcen und Termintypen für Farben/Filter
+      const from = String((p as { from?: unknown }).from || ""), to = String((p as { to?: unknown }).to || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return json({ error: "Zeitraum fehlt (from/to als JJJJ-MM-TT)" }, 400);
+      const ah = await authHeaders();
+      const [ra, rr2, rt] = await Promise.all([
+        raw("GET", `/akuwin-api/v6/appointments?FromDate=${from}&ToDate=${to}`, ah),
+        raw("GET", "/akuwin-api/v6/appointments/resources", ah),
+        raw("GET", "/akuwin-api/v6/appointments/types", ah),
+      ]);
+      if (ra.status !== 200) return json({ error: "AkuWin-Termine: " + ra.status + " " + text(ra).slice(0, 200) }, 502);
+      // deno-lint-ignore no-explicit-any
+      const types = rt.status === 200 ? (JSON.parse(text(rt)).Types || []).map((t: any) => ({ id: t.Id, name: t.Description, color: t.Color ? "#" + t.Color : null, minutes: t.DefaultDurationInMinutes })) : [];
+      // deno-lint-ignore no-explicit-any
+      const resources = rr2.status === 200 ? (JSON.parse(text(rr2)).Resources || []).map((r: any) => ({ id: r.Id, name: r.Description, type: r.Type, employeeId: r.EmployeeId ?? null, color: r.Color ? "#" + r.Color : null })) : [];
+      // deno-lint-ignore no-explicit-any
+      const appointments = (JSON.parse(text(ra)).Appointments || []).map((x: any) => {
+        let res: string[] = [];
+        try { res = Array.isArray(x.RessourceIds) ? x.RessourceIds : JSON.parse(x.RessourceIds || "[]"); } catch { /* */ }
+        return { id: x.Id, start: x.Start, end: x.DisplayFinish || x.Finish, allDay: !!x.IsAllDay, recurring: !!x.IsRecurringAppointment, typeId: x.TypeId, type: x.TypeName || "",
+          note: x.Note || "", clientId: x.ClientId || null, client: x.ClientFullName || "", resources: res, state: x.State || "", locked: !!x.IsLocked, by: x.CreatorEmployeeCode || "" };
+      }).sort((a: { start: string }, b: { start: string }) => a.start.localeCompare(b.start));
+      console.log(`[akuwin] ${user.email} Termine ${from}–${to} (${appointments.length})`);
+      return json({ appointments, resources, types });
+    }
     if (p.action === "call") {
       // Lesender Zugriff auf erlaubte Pfade; schreibend nur, wenn ausdrücklich freigegeben
       const method = (p.method || "GET").toUpperCase();

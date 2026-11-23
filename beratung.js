@@ -93,8 +93,14 @@ const name=()=>[S.kunde.vorname,S.kunde.nachname].filter(Boolean).join(" ")||"Ne
 const dots=(n,on="var(--forest)")=>`<span class="dots">${[1,2,3,4,5].map(i=>`<i style="background:${i<=n?on:"#DCE6E2"}"></i>`).join("")}</span>`;
 
 /* ---------- Audiogramm-Grafik ---------- */
-function audioSvg(big=false){
- const W=560,H=big?380:320,l=44,r=16,t=20,b=30,x=i=>l+i*(W-l-r)/(FREQ.length-1),y=db=>t+(db+10)/130*(H-t-b);
+/* Audiogramm je Ohr: Luftleitung durchgezogen (○ rechts / × links), Knochenleitung gestrichelt (< rechts / > links) */
+function audioPair(big=false,print=false){
+ const one=e=>{const d=degree(pta(e));return `<figure class="audone ${e}"><figcaption><span class="ear ${e}">${e==="R"?"Rechtes Ohr ○":"Linkes Ohr ×"}</span><b>${d?esc(d):"–"}</b>${pta(e)!=null?`<small>Ø ${Math.round(pta(e))} dB</small>`:""}</figcaption>${audioSvg(big,e,print)}</figure>`};
+ const bc=S.audioBC&&["R","L"].some(e=>Object.keys(S.audioBC[e]||{}).length);
+ return `<div class="audpair">${one("R")}${one("L")}</div>${bc?`<p class="audleg"><span>━ Luftleitung</span><span>┅ Knochenleitung</span></p>`:""}`;
+}
+function audioSvg(big=false,ear=null,print=false){
+ const W=ear?420:560,H=big?(ear?330:380):(ear?300:320),l=44,r=16,t=20,b=30,x=i=>l+i*(W-l-r)/(FREQ.length-1),y=db=>t+(db+10)/130*(H-t-b);
  const zones=[[-10,25,"#EEF6F2","normal"],[25,40,"#F3F6EC","leicht"],[40,60,"#FBF4E6","mittel"],[60,80,"#FBEDE6","hochgradig"],[80,120,"#F8E6E6","an Taubheit grenzend"]];
  let s=`<svg viewBox="0 0 ${W} ${H}" class="audsvg" role="img" aria-label="Tonaudiogramm">`;
  zones.forEach(([a,c,col,lb])=>{s+=`<rect x="${l}" y="${y(a)}" width="${W-l-r}" height="${y(c)-y(a)}" fill="${col}"/><text x="${W-r-6}" y="${y(a)+14}" text-anchor="end" font-size="11" fill="#7A918A">${lb}</text>`});
@@ -102,7 +108,11 @@ function audioSvg(big=false){
  s+=`<path d="M${x(1)} ${y(22)} Q${x(3)} ${y(18)} ${x(5)} ${y(28)} L${x(5)} ${y(55)} Q${x(3)} ${y(62)} ${x(1)} ${y(50)}Z" fill="#276955" opacity=".10"/><text x="${x(3)}" y="${y(48)}" font-size="12" fill="#276955" opacity=".8" text-anchor="middle">Sprachbereich</text>`;
  for(let d=0;d<=120;d+=20)s+=`<line x1="${l}" x2="${W-r}" y1="${y(d)}" y2="${y(d)}" stroke="#DCE6E2"/><text x="${l-8}" y="${y(d)+4}" text-anchor="end" font-size="11" fill="#587168">${d}</text>`;
  FREQ.forEach((f,i)=>s+=`<line x1="${x(i)}" x2="${x(i)}" y1="${t}" y2="${H-b}" stroke="#E7EEEB"/><text x="${x(i)}" y="${H-10}" text-anchor="middle" font-size="11" fill="#587168">${f>=1000?f/1000+"k":f}</text>`);
- [["R","#C0392B"],["L","#2F5D8A"]].forEach(([e,c])=>{const pts=FREQ.map((f,i)=>[i,S.audio[e][f]]).filter(p=>p[1]!=null&&p[1]!==""&&!isNaN(Number(p[1]))).map(p=>[p[0],Number(p[1])]);
+ [["R","#C0392B"],["L","#2F5D8A"]].filter(([e])=>!ear||e===ear).forEach(([e,c])=>{
+  const bc=S.audioBC&&S.audioBC[e]?FREQ.map((f,i)=>[i,S.audioBC[e][f]]).filter(p=>p[1]!=null&&!isNaN(Number(p[1]))).map(p=>[p[0],Number(p[1])]):[];
+  if(ear&&bc.length){if(bc.length>1)s+=`<polyline points="${bc.map(p=>x(p[0])+","+y(p[1])).join(" ")}" fill="none" stroke="${c}" stroke-width="1.8" stroke-dasharray="5 4" opacity=".8"/>`;
+   bc.forEach(p=>{const X=x(p[0]),Y=y(p[1]);s+=e==="R"?`<path d="M${X+4} ${Y-6}L${X-4} ${Y}L${X+4} ${Y+6}" fill="none" stroke="${c}" stroke-width="2"/>`:`<path d="M${X-4} ${Y-6}L${X+4} ${Y}L${X-4} ${Y+6}" fill="none" stroke="${c}" stroke-width="2"/>`})}
+  const pts=FREQ.map((f,i)=>[i,S.audio[e][f]]).filter(p=>p[1]!=null&&p[1]!==""&&!isNaN(Number(p[1]))).map(p=>[p[0],Number(p[1])]);
   if(pts.length>1)s+=`<polyline points="${pts.map(p=>x(p[0])+","+y(p[1])).join(" ")}" fill="none" stroke="${c}" stroke-width="2.5"/>`;
   pts.forEach(p=>{s+=e==="R"?`<circle cx="${x(p[0])}" cy="${y(p[1])}" r="6" fill="#fff" stroke="${c}" stroke-width="2.5"/>`:`<path d="M${x(p[0])-5} ${y(p[1])-5}l10 10M${x(p[0])+5} ${y(p[1])-5}l-10 10" stroke="${c}" stroke-width="2.5"/>`})});
  return s+`<text x="${l}" y="12" font-size="11" fill="#587168">dB HL</text></svg>`;
@@ -180,12 +190,13 @@ function stepAnamnese(){
  card("Bisherige Hörgeräte",yn(a+".hgAlt","Bereits Hörgeräte getragen",`<div class="form">${inp(a+".hgModell","Modell / seit wann")}${inp(a+".hgTrage","Tragedauer pro Tag")}</div><div class="q"><span class="ql">Zufriedenheit</span>${chips(a+".hgZufr",["sehr zufrieden","zufrieden","unzufrieden"])}</div><div class="form">${inp(a+".hgStoer","Was hat gestört?","text","","full")}</div>`));
 }
 function stepAudio(){
- const row=e=>`<tr><th><span class="ear ${e}">${e==="R"?"Rechts ○":"Links ×"}</span></th>${FREQ.map(f=>`<td><input inputmode="numeric" data-aud="${e}.${f}" value="${esc(S.audio[e][f]??"")}" aria-label="${e==="R"?"Rechts":"Links"} ${f} Hz"></td>`).join("")}</tr>`;
+ const lock=!!(S.audioSrc&&S.audioSrc.from==="AkuWin");
+ const row=e=>`<tr><th><span class="ear ${e}">${e==="R"?"Rechts ○":"Links ×"}</span></th>${FREQ.map(f=>`<td><input inputmode="numeric" data-aud="${e}.${f}" value="${esc(S.audio[e][f]??"")}" aria-label="${e==="R"?"Rechts":"Links"} ${f} Hz" ${lock?"readonly tabindex=\"-1\"":""}></td>`).join("")}</tr>`;
  const dR=degree(pta("R")),dL=degree(pta("L"));
- return card("Tonaudiogramm (Luftleitung)",`<div class="audtop">${S.kunde.akuwinId?`<button class="btn primary" data-akload ${AK.audLoading?"disabled":""}>${AK.audLoading?"Lädt …":"Aus AkuWin laden"}</button>`:`<button class="btn" data-step="0">Aus AkuWin laden</button>`}<span class="muted">${S.audioSrc?`Aus AkuWin · Messung vom ${esc(fmtD(S.audioSrc.date))}`:S.kunde.akuwinId?"Werte in dB HL eintragen oder aus AkuWin laden.":"Erst in Schritt 1 den Kunden aus AkuWin übernehmen – oder Werte in dB HL eintragen."}</span></div>
+ return card("Tonaudiogramm (Luftleitung)",`<div class="audtop">${S.kunde.akuwinId?`<button class="btn primary" data-akload ${AK.audLoading?"disabled":""}>${AK.audLoading?"Lädt …":"Aus AkuWin laden"}</button>`:`<button class="btn" data-step="0">Aus AkuWin laden</button>`}<span class="muted">${S.audioSrc?`<b class="aklock">🔒 Aus AkuWin · Messung vom ${esc(fmtD(S.audioSrc.date))} · nicht veränderbar</b>`:S.kunde.akuwinId?"Werte in dB HL eintragen oder aus AkuWin laden.":"Erst in Schritt 1 den Kunden aus AkuWin übernehmen – oder Werte in dB HL eintragen."}</span></div>
   ${AK.audios&&AK.audios.length>1?`<div class="q"><span class="ql">Messungen in AkuWin</span><div class="chips">${AK.audios.map(a=>`<button type="button" class="chip" data-akaud="${esc(a.guid)}" aria-pressed="${S.audioSrc&&S.audioSrc.guid===a.guid}">${esc(fmtD(a.date))}</button>`).join("")}</div></div>`:""}
-  <div class="scroll"><table class="audt"><thead><tr><th></th>${FREQ.map(f=>`<th>${f>=1000?f/1000+" kHz":f+" Hz"}</th>`).join("")}</tr></thead><tbody>${row("R")}${row("L")}</tbody></table></div>
-  <div id="audchart">${audioSvg()}</div>
+  <div class="scroll"><table class="audt${lock?" locked":""}"><thead><tr><th></th>${FREQ.map(f=>`<th>${f>=1000?f/1000+" kHz":f+" Hz"}</th>`).join("")}</tr></thead><tbody>${row("R")}${row("L")}</tbody></table></div>
+  <div id="audchart">${audioPair()}</div>
   <div class="degrees"><div><span class="ear R">Rechts</span><b>${dR?esc(dR):"–"}</b><small>${pta("R")!=null?"Mittelwert "+Math.round(pta("R"))+" dB":""}</small></div><div><span class="ear L">Links</span><b>${dL?esc(dL):"–"}</b><small>${pta("L")!=null?"Mittelwert "+Math.round(pta("L"))+" dB":""}</small></div></div>`);
 }
 function stepBedarf(){
@@ -284,7 +295,7 @@ function customerView(){
  const body=custTab===0?`<div class="cgrid">${DIMS.map((d,i)=>`<div class="cbox"><span>${d==="Ruhe"?"In ruhiger Umgebung":d==="Gruppe"?"Gespräche mit mehreren":"In lebhafter Umgebung"}</span>${dots(rec.n[i],"#B8452F")}<small>${["kaum Unterstützung nötig","etwas Unterstützung","spürbare Unterstützung","viel Unterstützung","sehr viel Unterstützung"][rec.n[i]-1]}</small></div>`).join("")}</div>
    <h3>Hier fällt Ihnen das Hören schwer</h3><div class="chips big">${hard.map(s=>`<span class="chip on">${esc(s.t)}</span>`).join("")||"<span>–</span>"}</div>
    <h3>Ihre Hörziele</h3><ol class="cgoals">${S.ziele.filter(z=>z.t).sort((a,b)=>a.p-b.p).map(z=>`<li>${esc(z.t)}</li>`).join("")}</ol>`
- :custTab===1?`<div class="caud">${audioSvg(true)}<div class="degrees"><div><span class="ear R">Rechtes Ohr</span><b>${esc(degree(pta("R"))||"–")}</b></div><div><span class="ear L">Linkes Ohr</span><b>${esc(degree(pta("L"))||"–")}</b></div></div><p class="muted">Die grüne Fläche zeigt, wo Sprache liegt. Alles, was unterhalb Ihrer Hörkurve liegt, können Sie hören – Laute darüber gehen verloren.</p></div>`
+ :custTab===1?`<div class="caud">${audioPair(true)}<p class="muted">Die grüne Fläche zeigt, wo Sprache liegt. Alles, was unterhalb Ihrer Hörkurve liegt, können Sie hören – Laute darüber gehen verloren.</p></div>`
  :custTab===2?`<div class="crec"><span class="pnum big">${stageIdx(st.id)+1}</span><div><h2>${st.name}</h2><p>${esc(st.sub)}</p><p class="muted">Ideal für ${esc(st.ideal)}</p></div></div>
    <div class="cgrid">${DIMS.map((d,i)=>`<div class="cbox"><span>${d}</span><small>Ihr Bedarf</small>${dots(rec.n[i],"#B8452F")}<small>${st.name}</small>${dots(st.p[i])}</div>`).join("")}</div>`
  :`<div class="cstages">${STAGES.map((s,i)=>{const f=stageFrom(s.id);return `<div class="cstage${s.id===st.id?" on":""}"><span class="pnum">${i+1}</span><b>${s.name}</b><small>${esc(s.sub)}</small>
@@ -465,6 +476,8 @@ p{margin:0;font-size:11pt;line-height:1.55}
 /* Hörsituation */
 .box{background:#EEF3F1;border-radius:5mm;padding:6mm 7mm}
 .aud{height:86mm}.aud svg{width:100%;height:100%;display:block}
+.aud2 .audpair{display:grid;grid-template-columns:1fr 1fr;gap:5mm}.aud2 figure{margin:0}.aud2 figcaption{display:flex;align-items:baseline;gap:3mm;margin-bottom:1.5mm;font-size:9.5pt}
+.aud2 figcaption .ear{font-weight:700}.aud2 .ear.R{color:#C0392B}.aud2 .ear.L{color:#2F5D8A}.aud2 figcaption small{color:#6B7F78}.aud2 svg{width:100%;height:auto;display:block}.aud2 .audleg{font-size:8.5pt;color:#6B7F78;display:flex;gap:6mm;margin:1mm 0 0}
 .deg{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
 .deg div{border-radius:4mm;padding:4mm 5mm;background:#F6F9F7;border:.3mm solid #DCE6E2}
 .deg small{display:block;font-size:9pt;color:#587168}.deg b{font-size:14pt}
@@ -545,7 +558,7 @@ footer img{height:7mm}
  <span class="kick">01 · Ihre Hörsituation</span><h2>Was wir über Ihr Hören wissen</h2>
  <div class="box" style="display:flex;flex-direction:column;gap:3mm">${friendlySituation().map(t=>`<p>${esc(t)}</p>`).join("")||"<p>–</p>"}</div>
  <h3>Ihr Tonaudiogramm</h3>
- <div class="aud">${audioSvg(true)}</div>
+ <div class="aud2">${audioPair(true,true)}</div>
  <div class="deg"><div><small class="r">Rechtes Ohr ○</small><b>${dR?esc(dR[0].toUpperCase()+dR.slice(1)):"–"}</b>${pta("R")!=null?`<small>mittlerer Hörverlust ${Math.round(pta("R"))} dB</small>`:""}</div><div><small class="l">Linkes Ohr ×</small><b>${dL?esc(dL[0].toUpperCase()+dL.slice(1)):"–"}</b>${pta("L")!=null?`<small>mittlerer Hörverlust ${Math.round(pta("L"))} dB</small>`:""}</div></div>
  <p class="legend">So lesen Sie das Audiogramm: Links sind tiefe Töne, rechts hohe. Je weiter unten die Kurve liegt, desto lauter muss ein Ton sein, damit Sie ihn hören. Die grüne Fläche zeigt, wo die Laute der Sprache liegen – alles, was oberhalb Ihrer Kurve liegt, geht verloren. Besonders die hohen Töne tragen Konsonanten wie s, f oder t, die für das Verstehen wichtig sind.</p>
  ${foot(3)}</div></section>
@@ -635,7 +648,7 @@ document.addEventListener("click",e=>{
  if(d.akpick){akPick(d.akpick);return}
  if(d.akload!=null||d.akreload!=null){akLoadAudios(true);return}
  if(d.akaud){const a=(AK.audios||[]).find(x=>x.guid===d.akaud);if(a){applyAudiogram(a);changed();rr();toast("Audiogramm vom "+fmtD(a.date)+" übernommen")}return}
- if(d.akunlink!=null){delete S.kunde.akuwinId;S.audioSrc=null;AK.audios=null;changed();rr();return}
+ if(d.akunlink!=null){delete S.kunde.akuwinId;if(S.audioSrc){S.audio={R:{},L:{}};S.audioBC=null}S.audioSrc=null;AK.audios=null;changed();rr();return}
  if(d.otowho!=null){const cur=S.oto.assignee===undefined?H().me?.id:S.oto.assignee;S.oto.assignee=cur===d.otowho?null:d.otowho;changed();rr();return}
  if(d.otosend!=null){sendLab();return}
  if(d.brochure!=null){saveNow();openBrochure();return}
@@ -651,7 +664,7 @@ document.addEventListener("input",e=>{
  if(mode!=="edit")return;
  if(t.dataset.in){set(t.dataset.in,t.dataset.num!=null?Number(t.value):t.value);if(t.type==="range"){const lb=t.closest("label").querySelector("b");if(lb)lb.textContent=t.value}
   if(t.dataset.in.startsWith("kunde.")){const c=document.querySelector(".crumb b");if(c)c.textContent=name()}changed();return}
- if(t.dataset.aud){const[e2,f]=t.dataset.aud.split(".");const v=t.value.trim();S.audio[e2][f]=v===""?undefined:Number(v);if(S.audioSrc)S.audioSrc.edited=true;$("audchart").innerHTML=audioSvg();
+ if(t.dataset.aud){if(S.audioSrc&&S.audioSrc.from==="AkuWin"){rr();return}const[e2,f]=t.dataset.aud.split(".");const v=t.value.trim();S.audio[e2][f]=v===""?undefined:Number(v);$("audchart").innerHTML=audioPair();
   const dg=document.querySelectorAll(".degrees b");if(dg.length===2){dg[0].textContent=degree(pta("R"))||"–";dg[1].textContent=degree(pta("L"))||"–"}changed()}
 });
 document.addEventListener("change",e=>{if(!active()||KUNDE||mode!=="edit")return;if(e.target.dataset.in&&e.target.tagName==="SELECT")rr()});
