@@ -181,6 +181,28 @@ Deno.serve(async (req) => {
       try { const r = await raw("GET", "/swagger/index.html", {}, undefined, false); out.reach = r.status; } catch (e) { out.reach = String(e); }
       return json(out);
     }
+    if (p.action === "diag3") {
+      // node:tls-Varianten: eigenes Zertifikat als CA, Namensprüfung durch exakten Zertifikatsvergleich ersetzt
+      const u = new URL(BASE), port = Number(u.port) || 443, pem = await certPem();
+      const tlsm = await import("node:tls");
+      const run = (opts: Record<string, unknown>) => new Promise((res) => {
+        const log: string[] = []; let data = "";
+        const s = tlsm.connect({ host: u.hostname, port, ...opts });
+        const to = setTimeout(() => { s.destroy(); res({ log, data: data.slice(0, 300), r: "timeout" }); }, 12000);
+        s.on("secureConnect", () => { log.push("secureConnect authorized=" + (s as unknown as { authorized: boolean }).authorized);
+          s.write(`GET ${u.pathname}/swagger/index.html HTTP/1.1\r\nHost: ${u.host}\r\nConnection: close\r\n\r\n`, (e?: Error) => log.push("write cb " + (e ? e.message : "ok"))); });
+        s.on("data", (d: unknown) => { data += String(d); });
+        s.on("error", (e: Error & { code?: string }) => { log.push("error " + e.code + " " + e.message); });
+        s.on("close", () => { clearTimeout(to); res({ log, data: data.slice(0, 300) }); });
+      });
+      const ok = () => undefined;
+      return json({
+        v1: await run({ rejectUnauthorized: false }),
+        v2: await run({ rejectUnauthorized: false, servername: "ipnAkuWinServer" }),
+        v3: await run({ ca: [pem], checkServerIdentity: ok }),
+        v4: await run({ ca: [pem], checkServerIdentity: ok, rejectUnauthorized: false, servername: "ipnAkuWinServer" }),
+      });
+    }
     if (p.action === "swagger") {
       // öffentliche API-Beschreibung (ohne Zugangsdaten)
       const tries = ["/swagger/v1/swagger.json", "/swagger/swagger.json", "/swagger/docs/v1", "/swagger.json", "/openapi.json", "/swagger/v2/swagger.json"];
