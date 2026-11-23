@@ -132,7 +132,8 @@ function responseComplete(all: Uint8Array): boolean {
   return false;
 }
 async function raw(method: string, path: string, headers: Record<string, string> = {}, body?: string, needPin = true): Promise<Raw> {
-  const u = new URL(BASE + path);
+  // "~/pfad" = relativ zur Server-Wurzel statt zu AKUWIN_URL (nur für Erkundung)
+  const u = path.startsWith("~/") ? new URL(path.slice(1), BASE) : new URL(BASE + path);
   if (needPin && !PIN) throw new Error("Kein Zertifikat-Fingerabdruck hinterlegt");
   const want = b64only(await certPem());
   const tcp = await Deno.connect({ hostname: u.hostname, port: Number(u.port) || 443 });
@@ -240,9 +241,19 @@ Deno.serve(async (req) => {
     if (p.action === "probe") {
       // ohne Zugangsdaten: zeigt Status/Kopfzeilen eines Pfads (z. B. um das Anmeldeverfahren zu erkennen)
       const path = String(p.path || "/");
-      if (!path.startsWith("/") || path.includes("..")) return json({ error: "Ungültiger Pfad" }, 400);
+      if (!(path.startsWith("/") || path.startsWith("~/")) || path.includes("..")) return json({ error: "Ungültiger Pfad" }, 400);
       const r = await raw((p.method || "GET").toUpperCase(), path, p.body != null ? { "Content-Type": "application/json" } : {}, p.body != null ? JSON.stringify(p.body) : undefined, false);
       return json({ status: r.status, headers: r.headers, body: text(r).slice(0, 3000) });
+    }
+    if (p.action === "scan") {
+      // mehrere Pfade ohne Zugangsdaten abfragen (nur Status)
+      const paths = (Array.isArray((p as { paths?: unknown }).paths) ? (p as { paths: string[] }).paths : []).slice(0, 30);
+      const res: Record<string, unknown> = {};
+      await Promise.all(paths.map(async (x) => {
+        if (!(x.startsWith("/") || x.startsWith("~/")) || x.includes("..")) { res[x] = "ungültig"; return; }
+        try { const r = await raw("GET", x, {}, undefined, false); res[x] = r.status + " " + (r.headers["content-type"] || "") + " " + (r.headers["location"] || "") + " " + text(r).slice(0, 120); } catch (e) { res[x] = String(e); }
+      }));
+      return json(res);
     }
     if (p.action === "call") {
       // Lesender Zugriff auf erlaubte Pfade; schreibend nur, wenn ausdrücklich freigegeben
