@@ -177,7 +177,7 @@ const hmT=s=>s.slice(11,16);
 const termDate=s=>new Date(s.slice(0,10)+"T12:00").toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"});
 async function akMeta(){if(AK.meta||AK.metaLoading)return;AK.metaLoading=true;try{AK.meta=await akInvoke({action:"apptMeta"})}catch(e){AK.meta={types:[],resources:[],err:e.message}}AK.metaLoading=false;rr()}
 async function akUpcoming(force){if(!S.kunde.akuwinId||(AK.upcoming&&!force)||AK.upLoading)return;AK.upLoading=true;
- try{const d=await akInvoke({action:"clientAppointments",clientId:S.kunde.akuwinId});AK.upcoming=d.appointments||[];
+ try{const d=await akInvoke({action:"clientAppointments",clientId:S.kunde.akuwinId});AK.upcoming=(d.appointments||[]).slice().sort((a,b)=>a.start.localeCompare(b.start));AK.upAt=Date.now();
   // Snapshot für die Broschüre
   S.termine=AK.upcoming.map(a=>({start:a.start,end:a.end,type:a.type,res:(a.resources||[]).map(resLabel).filter(Boolean).join(", "),note:a.note}));changed();
  }catch(e){AK.upcoming=[];AK.upErr=e.message}AK.upLoading=false;rr()}
@@ -239,7 +239,7 @@ function termineCard(){
  const resChips=m.resources.map(x=>`<button type="button" class="chip" data-tfres="${esc(x.id)}" aria-pressed="${t.res===x.id}">${esc(resLabel(x.id)||x.name)}</button>`).join("");
  const durs=[15,30,45,60,90,120,180];if(!durs.includes(Number(t.minutes)))durs.push(Number(t.minutes));
  return card("Folgetermine in AkuWin",`${m.err?`<p class="akerr">AkuWin: ${esc(m.err)}</p>`:""}
-  <div class="tplan"><h4>Geplante Termine ${AK.upLoading?'<small class="muted">lädt …</small>':`<small class="muted">${list.length}</small>`}</h4>
+  <div class="tplan"><h4>Geplante Termine ${AK.upLoading?'<small class="muted">lädt …</small>':`<small class="muted">${list.length}${AK.upAt?" · Stand "+new Date(AK.upAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):""}</small>`}<button type="button" class="linkbtn tref" data-tfrefresh ${AK.upLoading?"disabled":""}>↻ aktualisieren</button></h4>
    ${list.length?`<div class="tlist2">${list.map(a=>{const ty=m.types.find(x=>x.id===a.typeId);return `<div class="trow"><span class="tdot" style="background:${esc(ty&&ty.color||"#E6EEEA")}"></span><b>${esc(termDate(a.start))}</b><span>${hmT(a.start)}–${hmT(a.end)} Uhr</span><span>${esc(a.type)}</span><span class="muted">${esc((a.resources||[]).map(resLabel).filter(Boolean).join(", "))}</span></div>`}).join("")}</div>`:AK.upLoading?"":'<p class="muted">Noch keine kommenden Termine in AkuWin.</p>'}</div>
   <div class="tform"><h4>Neuer Termin</h4>
    <div class="q"><span class="ql">Termintyp</span><div class="chips">${typeChips}</div></div>
@@ -746,9 +746,12 @@ footer img{height:7mm}
  ${foot(9)}</div></section>
 </body></html>`;
 }
-function openBrochure(){
+async function openBrochure(){
  if(!name()||name()==="Neuer Kunde"){toast("Bitte zuerst den Kundennamen eintragen");return}
+ // Fenster sofort öffnen (sonst blockiert der Browser), dann aktuelle Termine aus AkuWin holen und füllen
  const w=window.open("","_blank");if(!w){toast("Fenster blockiert – bitte Pop-ups erlauben");return}
+ w.document.write('<p style="font-family:sans-serif;padding:40px;color:#1B493B">Broschüre wird erstellt …</p>');
+ if(S.kunde.akuwinId){try{await akUpcoming(true)}catch{}}
  w.document.open();w.document.write(brochureHtml());w.document.close();
 }
 
@@ -765,7 +768,8 @@ document.addEventListener("click",e=>{
  if(d.blist!=null){saveNow();mode="list";customer=false;listLoaded=false;H().rerender();return}
  if(d.goto){saveNow();if(d.goto==="labor"){H().go("aufgaben");H().setTab("labor")}else H().go(d.goto);return}
  if(mode!=="edit")return;
- if(d.step!=null){step=Number(d.step);saveNow();H().rerender();window.scrollTo(0,0);return}
+ if(d.step!=null){step=Number(d.step);if(step===8){AK.upcoming=null;AK.busy=null}saveNow();H().rerender();window.scrollTo(0,0);return}
+ if(d.tfrefresh!=null){AK.busy=null;akUpcoming(true);return}
  if(d.set){set(d.set,get(d.set)===d.v&&!d.set.endsWith("kasse")&&d.set!=="oto.sides"?"":d.v);changed();rr();return}
  if(d.tog){const a=get(d.tog)||[];set(d.tog,a.includes(d.v)?a.filter(x=>x!==d.v):[...a,d.v]);changed();rr();return}
  if(d.sit){const r=S.sit[d.sit]||{};const v=Number(d.v);r[d.k]=r[d.k]===v?null:v;if(d.k==="d"&&v>0&&r.i==null)r.i=1;if(d.k==="d"&&v===0)r.i=null;S.sit[d.sit]=r;changed();rr();return}
@@ -820,3 +824,6 @@ if(KUNDE){
 
 window.HD_BERATUNG={render,startWith:name=>{H().go("beratung");newConsultation();const n=String(name||"").replace(/,.*$/,"").trim();if(n){AK.q=n;akSearch(n);H().rerender()}}};
 })();
+/* Abschluss: geplante Termine automatisch auffrischen (beim Zurückkehren in die App und alle 2 Minuten) */
+(function(){const fresh=()=>{if(mode==="edit"&&step===8&&S.kunde&&S.kunde.akuwinId&&!AK.upLoading&&document.visibilityState==="visible"&&active()){AK.busy=null;akUpcoming(true)}};
+ document.addEventListener("visibilitychange",fresh);setInterval(fresh,120000)})();
