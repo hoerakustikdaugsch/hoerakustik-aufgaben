@@ -328,6 +328,66 @@ Deno.serve(async (req) => {
       console.log(`[akuwin] ${user.email} Termine ${from}–${to} (${appointments.length})`);
       return json({ appointments, resources, types });
     }
+    if (p.action === "apptMeta" || p.action === "clientAppointments" || p.action === "createAppointment") {
+      const ah = await authHeaders();
+      const meta = async () => {
+        const [rt, rr2] = await Promise.all([raw("GET", "/akuwin-api/v6/appointments/types", ah), raw("GET", "/akuwin-api/v6/appointments/resources", ah)]);
+        // deno-lint-ignore no-explicit-any
+        const types = rt.status === 200 ? (JSON.parse(text(rt)).Types || []).map((t: any) => ({ id: t.Id, name: t.Description, color: t.Color ? "#" + t.Color : null, minutes: t.DefaultDurationInMinutes || 30, conflict: !!t.DefaultIsConflictChecking })) : [];
+        // deno-lint-ignore no-explicit-any
+        const resources = rr2.status === 200 ? (JSON.parse(text(rr2)).Resources || []).map((r: any) => ({ id: r.Id, name: r.Description, type: r.Type, mandatorId: r.MandatorId })) : [];
+        return { types, resources };
+      };
+      const ymd = (d: Date) => d.toISOString().slice(0, 10);
+      if (p.action === "apptMeta") return json(await meta());
+      if (p.action === "clientAppointments") {
+        // kommende Termine eines Kunden (heute bis +12 Monate)
+        const id = Number((p as { clientId?: unknown }).clientId);
+        if (!Number.isInteger(id) || id <= 0) return json({ error: "Ungültige Kunden-ID" }, 400);
+        const from = new Date(), to = new Date(Date.now() + 365 * 864e5);
+        const r = await raw("GET", `/akuwin-api/v6/appointments?FromDate=${ymd(from)}&ToDate=${ymd(to)}&ClientId=${id}`, ah);
+        if (r.status !== 200) return json({ error: "AkuWin-Termine: " + r.status }, 502);
+        // deno-lint-ignore no-explicit-any
+        const list = (JSON.parse(text(r)).Appointments || []).filter((x: any) => x.ClientId === id && x.State !== "Cancelled")
+          // deno-lint-ignore no-explicit-any
+          .map((x: any) => ({ id: x.Id, start: x.Start, end: x.DisplayFinish || x.Finish, type: x.TypeName || "", typeId: x.TypeId, note: x.Note || "", resources: Array.isArray(x.RessourceIds) ? x.RessourceIds : [] }))
+          .sort((a: { start: string }, b: { start: string }) => a.start.localeCompare(b.start));
+        return json({ appointments: list });
+      }
+      // createAppointment – nur mit vollständigen, geprüften Angaben
+      const q = p as { clientId?: unknown; typeId?: unknown; start?: unknown; minutes?: unknown; resourceIds?: unknown; note?: unknown };
+      const id = Number(q.clientId), minutes = Number(q.minutes), start = String(q.start || "");
+      const resIds = Array.isArray(q.resourceIds) ? q.resourceIds.map(String) : [];
+      if (!Number.isInteger(id) || id <= 0) return json({ error: "Kein AkuWin-Kunde verknüpft" }, 400);
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)$/.test(start)) return json({ error: "Ungültiger Beginn" }, 400);
+      if (!Number.isFinite(minutes) || minutes < 5 || minutes > 600) return json({ error: "Ungültige Dauer" }, 400);
+      const startMs = Date.parse(start);
+      if (!(startMs > Date.now() - 864e5)) return json({ error: "Termin liegt in der Vergangenheit" }, 400);
+      const m = await meta();
+      const type = m.types.find((t) => t.id === q.typeId);
+      if (!type) return json({ error: "Unbekannter Termintyp" }, 400);
+      if (!resIds.length || resIds.some((r) => !m.resources.find((x) => x.id === r))) return json({ error: "Bitte eine gültige Ressource wählen" }, 400);
+      // Ende mit gleichem Zeitzonen-Versatz wie der Beginn
+      const off = start.match(/([+-]\d{2}:\d{2}|Z)$/)![1];
+      const offMin = off === "Z" ? 0 : (off[0] === "-" ? -1 : 1) * (Number(off.slice(1, 3)) * 60 + Number(off.slice(4, 6)));
+      const endLocal = new Date(startMs + minutes * 60000 + offMin * 60000).toISOString().slice(0, 19) + (off === "Z" ? "Z" : off);
+      const startNorm = new Date(startMs + offMin * 60000).toISOString().slice(0, 19) + (off === "Z" ? "Z" : off);
+      const mandatorId = m.resources.find((x) => x.id === resIds[0])?.mandatorId ?? null;
+      const body: Record<string, unknown> = { Start: startNorm, Finish: endLocal, IsAllDay: false, TypeId: type.id, Note: String(q.note || "").slice(0, 500), ClientId: id, RessourceIds: resIds, IsConflictChecking: type.conflict, State: "Approved" };
+      if (mandatorId != null) body.MandatorId = mandatorId;
+      const r = await raw("POST", "/akuwin-api/v6/appointments/nonrecurrent", { ...ah, "Content-Type": "application/json" }, JSON.stringify(body));
+      const t = text(r);
+      let data: unknown = t; try { data = JSON.parse(t); } catch { /* */ }
+      console.log(`[akuwin] ${user.email} Termin anlegen Kunde ${id} ${startNorm} ${type.name} → ${r.status}`);
+      if (r.status >= 300) {
+        // deno-lint-ignore no-explicit-any
+        const d: any = data; const msg = d?.ResponseStatus?.Message || d?.title || (typeof d === "string" ? d.slice(0, 200) : "");
+        return json({ error: "AkuWin hat den Termin nicht angelegt (" + r.status + "): " + msg, details: d?.errors || d?.ResponseStatus?.Errors || null }, 502);
+      }
+      // deno-lint-ignore no-explicit-any
+      const created: any = data;
+      return json({ ok: true, id: created?.Id || created?.Appointment?.Id || null, start: startNorm, end: endLocal, type: type.name, typeId: type.id, resourceIds: resIds, raw: typeof created === "object" ? Object.keys(created || {}) : null });
+    }
     if (p.action === "call") {
       // Lesender Zugriff auf erlaubte Pfade; schreibend nur, wenn ausdrücklich freigegeben
       const method = (p.method || "GET").toUpperCase();

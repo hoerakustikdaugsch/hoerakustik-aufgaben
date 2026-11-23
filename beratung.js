@@ -86,6 +86,12 @@ const flags=()=>{const a=S.an,f=[];
  if(a.verlauf==="plötzlich")f.push("Plötzlicher Hörverlust");if(a.seite==="einseitig rechts"||a.seite==="einseitig links")f.push("Einseitiger Hörverlust");
  if(a.schwindel==="ja")f.push("Schwindel");if(a.ausfluss==="ja")f.push("Ausfluss aus dem Ohr");if(a.schmerz==="ja")f.push("Ohrenschmerzen");if(a.puls==="ja")f.push("Pulsierendes Ohrgeräusch");
  if(a.hoersturz==="ja"&&a.hsWann==="in den letzten 3 Monaten")f.push("Hörsturz vor kurzem");
+ ["R","L"].forEach(e=>{const g=a["oto"+e+"G"]||[],t=a["oto"+e+"T"]||[],s2=e==="R"?" rechts":" links";
+  if(g.includes("Cerumen obturierend"))f.push("Obturierendes Cerumen"+s2+" – vor Messung/Abformung entfernen lassen");
+  if(g.includes("gerötet / entzündet")||g.includes("Schwellung"))f.push("Entzündeter Gehörgang"+s2);
+  if(g.includes("Fremdkörper"))f.push("Fremdkörper im Gehörgang"+s2);
+  if(t.includes("Perforation"))f.push("Trommelfellperforation"+s2);
+  if(t.includes("gerötet")||t.includes("vorgewölbt"))f.push("Auffälliges Trommelfell"+s2)});
  const r=pta("R"),l=pta("L");if(r!=null&&l!=null&&Math.abs(r-l)>=20)f.push("Deutlicher Seitenunterschied im Audiogramm");return f};
 function ears(){const r=pta("R"),l=pta("L");const c=[r,l].filter(v=>v!=null&&v>25).length;return c||2}
 const curStage=()=>S.override!==""?Number(S.override):recommend().idx;
@@ -127,7 +133,7 @@ function audioSvg(big=false,ear=null,print=false){
 
 /* ---------- Schritte ---------- */
 /* ---------- AkuWin ---------- */
-const AK={q:"",loading:false,res:null,err:"",audios:null,audLoading:false};
+const AK={q:"",loading:false,res:null,err:"",audios:null,audLoading:false,meta:null,metaLoading:false,upcoming:null,upLoading:false,creating:false};
 const fmtD=d=>d?new Date(d+"T12:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"}):"";
 async function akInvoke(body){const r=await H().sb.functions.invoke("akuwin",{body});if(r.error){let m=String(r.error.message||r.error);try{const j=await r.error.context.json();m=j.error||m}catch{}throw new Error(m)}if(r.data&&r.data.error)throw new Error(r.data.error);return r.data}
 let akT=null;
@@ -166,6 +172,57 @@ async function akPick(id){
  if(c.street||c.city)k.adresse=[c.street,[c.zip,c.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
  AK.q="";AK.res=null;changed();toast("Kunde aus AkuWin übernommen");await akLoadAudios(true);
 }
+/* ---------- Folgetermine (AkuWin) ---------- */
+const hmT=s=>s.slice(11,16);
+const termDate=s=>new Date(s.slice(0,10)+"T12:00").toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"});
+async function akMeta(){if(AK.meta||AK.metaLoading)return;AK.metaLoading=true;try{AK.meta=await akInvoke({action:"apptMeta"})}catch(e){AK.meta={types:[],resources:[],err:e.message}}AK.metaLoading=false;rr()}
+async function akUpcoming(force){if(!S.kunde.akuwinId||(AK.upcoming&&!force)||AK.upLoading)return;AK.upLoading=true;
+ try{const d=await akInvoke({action:"clientAppointments",clientId:S.kunde.akuwinId});AK.upcoming=d.appointments||[];
+  // Snapshot für die Broschüre
+  S.termine=AK.upcoming.map(a=>({start:a.start,end:a.end,type:a.type,res:(a.resources||[]).map(resLabel).filter(Boolean).join(", "),note:a.note}));changed();
+ }catch(e){AK.upcoming=[];AK.upErr=e.message}AK.upLoading=false;rr()}
+const resLabel=id=>{const r=(AK.meta&&AK.meta.resources||[]).find(x=>x.id===id);if(!r)return "";const n=r.name.replace(/\s*\([^)]*\)/,"");return n.includes(",")?n.split(",")[1].trim():n};
+function tfDefaults(){
+ const t=S.tf||(S.tf={});const m=AK.meta||{types:[],resources:[]};
+ if(!t.typeId){const pref=m.types.find(x=>/^Anpassung$/i.test(x.name))||m.types[0];if(pref){t.typeId=pref.id;t.minutes=pref.minutes}}
+ if(!t.res){const meName=(H().team().find(x=>x.id===H().me?.id)?.name||"").split(" ")[0].toLowerCase();const r=m.resources.find(x=>x.type==="Employee"&&x.name.toLowerCase().includes(meName))||m.resources.find(x=>x.type==="Employee")||m.resources[0];if(r)t.res=r.id}
+ if(!t.date){const d=new Date();d.setDate(d.getDate()+7);if(d.getDay()===0)d.setDate(d.getDate()+1);if(d.getDay()===6)d.setDate(d.getDate()+2);t.date=d.toISOString().slice(0,10)}
+ if(!t.time)t.time="10:00";if(!t.minutes)t.minutes=60;return t;
+}
+function termineCard(){
+ if(!S.kunde.akuwinId)return card("Folgetermine in AkuWin",`<div class="audtop"><button class="btn" data-step="0">Kunde aus AkuWin übernehmen</button><span class="muted">Termine können angelegt werden, sobald die Beratung mit einem AkuWin-Kunden verknüpft ist.</span></div>`);
+ if(!AK.meta){setTimeout(akMeta,0);return card("Folgetermine in AkuWin",'<p class="muted">Termintypen werden aus AkuWin geladen …</p>')}
+ if(AK.upcoming==null&&!AK.upLoading)setTimeout(()=>akUpcoming(),0);
+ const m=AK.meta,t=tfDefaults();
+ const list=AK.upcoming||[];
+ const typeChips=m.types.map(x=>`<button type="button" class="chip tchip" data-tftype="${esc(x.id)}" aria-pressed="${t.typeId===x.id}" style="--tc:${esc(x.color||"#E6EEEA")}"><i></i>${esc(x.name)}</button>`).join("");
+ const resChips=m.resources.map(x=>`<button type="button" class="chip" data-tfres="${esc(x.id)}" aria-pressed="${t.res===x.id}">${esc(resLabel(x.id)||x.name)}</button>`).join("");
+ const durs=[15,30,45,60,90,120,180];if(!durs.includes(Number(t.minutes)))durs.push(Number(t.minutes));
+ return card("Folgetermine in AkuWin",`${m.err?`<p class="akerr">AkuWin: ${esc(m.err)}</p>`:""}
+  <div class="tplan"><h4>Geplante Termine ${AK.upLoading?'<small class="muted">lädt …</small>':`<small class="muted">${list.length}</small>`}</h4>
+   ${list.length?`<div class="tlist2">${list.map(a=>{const ty=m.types.find(x=>x.id===a.typeId);return `<div class="trow"><span class="tdot" style="background:${esc(ty&&ty.color||"#E6EEEA")}"></span><b>${esc(termDate(a.start))}</b><span>${hmT(a.start)}–${hmT(a.end)} Uhr</span><span>${esc(a.type)}</span><span class="muted">${esc((a.resources||[]).map(resLabel).filter(Boolean).join(", "))}</span></div>`}).join("")}</div>`:AK.upLoading?"":'<p class="muted">Noch keine kommenden Termine in AkuWin.</p>'}</div>
+  <div class="tform"><h4>Neuer Termin</h4>
+   <div class="q"><span class="ql">Termintyp</span><div class="chips">${typeChips}</div></div>
+   <div class="form tgrid"><label>Datum<input type="date" data-in="tf.date" value="${esc(t.date)}"></label><label>Uhrzeit<input type="time" step="900" data-in="tf.time" value="${esc(t.time)}"></label>
+    <label>Dauer<select data-in="tf.minutes" data-num>${durs.sort((a,b)=>a-b).map(d=>`<option value="${d}" ${Number(t.minutes)===d?"selected":""}>${d<60?d+" Min.":(d/60).toString().replace(".",",")+" Std."}</option>`).join("")}</select></label></div>
+   <div class="q"><span class="ql">Bei</span><div class="chips">${resChips}</div></div>
+   <div class="form">${inp("tf.note","Notiz für AkuWin","text","z. B. Erstanpassung, Hörsysteme mitbringen","full")}</div>
+   <div class="nav2"><span class="muted">Der Termin wird sofort in AkuWin eingetragen und erscheint im Kalender und in der Broschüre.</span><button class="btn primary" data-tfcreate ${AK.creating?"disabled":""}>${AK.creating?"Wird angelegt …":"Termin in AkuWin anlegen"}</button></div></div>`);
+}
+async function tfCreate(){
+ const t=tfDefaults(),m=AK.meta;const ty=m.types.find(x=>x.id===t.typeId);
+ if(!ty){toast("Bitte einen Termintyp wählen");return}if(!t.date||!t.time){toast("Bitte Datum und Uhrzeit wählen");return}
+ const local=new Date(t.date+"T"+t.time+":00");if(isNaN(local))return;
+ if(local<new Date()){toast("Der Termin liegt in der Vergangenheit");return}
+ const o=-local.getTimezoneOffset(),off=(o>=0?"+":"-")+String(Math.floor(Math.abs(o)/60)).padStart(2,"0")+":"+String(Math.abs(o)%60).padStart(2,"0");
+ const start=t.date+"T"+t.time+":00"+off;
+ const txt=`${ty.name} am ${local.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})} um ${t.time} Uhr (${t.minutes} Min.) bei ${resLabel(t.res)} für ${name()}.`;
+ if(!await H().ask("Termin in AkuWin anlegen?",txt,"Anlegen"))return;
+ AK.creating=true;rr();
+ try{await akInvoke({action:"createAppointment",clientId:S.kunde.akuwinId,typeId:ty.id,start,minutes:Number(t.minutes),resourceIds:[t.res],note:t.note||""});
+  toast("Termin in AkuWin angelegt");S.tf={typeId:t.typeId,res:t.res,minutes:t.minutes};AK.creating=false;await akUpcoming(true);window.HD_KALENDER&&window.HD_KALENDER.load(true,local);
+ }catch(e){AK.creating=false;rr();await H().ask("Termin nicht angelegt",e.message,"OK")}
+}
 function stepKunde(){
  const k="kunde";
  return akCard()+card("Kunde",`<div class="q"><span class="ql">Anrede</span>${chips(k+".anrede",["Frau","Herr","neutral"])}</div><div class="form">${inp(k+".vorname","Vorname")}${inp(k+".nachname","Nachname")}${inp(k+".geb","Geburtsdatum","date")}${inp(k+".tel","Telefon","tel")}${inp(k+".mail","E-Mail","email","","full")}</div>`)+
@@ -190,6 +247,10 @@ function stepAnamnese(){
   qs("Entzündungen & Befunde",a+".entz",["Mittelohrentzündung akut","Mittelohrentzündung chronisch","Gehörgangsentzündung","Trommelfellperforation","Cholesteatom","Otosklerose"],true)+
   qs("Operationen am Ohr",a+".ops",["Paukenröhrchen","Tympanoplastik","Stapesplastik","Mastoidektomie","Cochlea-Implantat","BAHA"],true)+
   `<div class="form">${inp(a+".ereignisSonst","Sonstige Ereignisse am Ohr","text","z. B. Unfall, Barotrauma, Fremdkörper","full")}</div>`)+
+ card("Otoskopie",`<p class="muted">Befund je Ohr – mehrere Angaben möglich.</p><div class="ears2">${["R","L"].map(e=>`<div><h4 class="ear ${e}">${e==="R"?"Rechtes Ohr":"Linkes Ohr"}</h4>
+   ${qs("Gehörgang",a+".oto"+e+"G",["frei, reizlos","Cerumen wenig","Cerumen viel","Cerumen obturierend","gerötet / entzündet","Schwellung","Ekzem / trockene Haut","Exostosen","Fremdkörper","eng / gewunden"],true)}
+   ${qs("Trommelfell",a+".oto"+e+"T",["intakt, reizlos","nicht einsehbar","getrübt","retrahiert","gerötet","vorgewölbt","Narben / Kalk","Perforation","Paukenröhrchen"],true)}
+   ${qs("Abformung",a+".oto"+e+"A",["möglich","erst nach Reinigung","nicht möglich"])}</div>`).join("")}</div>`)+
  card("Begleitsymptome",yn(a+".tinn","Tinnitus / Ohrgeräusch",`<div class="q"><span class="ql">Seite</span>${chips(a+".tinnSeite",["rechts","links","beidseitig","im Kopf"])}</div><div class="q"><span class="ql">Klang</span>${chips(a+".tinnArt",["Pfeifen","Rauschen","Brummen","Pulsieren"])}</div>
    <label class="range">Belastung: <b>${S.an.tinnBel}</b> von 10<input type="range" min="0" max="10" data-in="an.tinnBel" data-num value="${S.an.tinnBel}"></label>`)+
   yn(a+".schwindel","Schwindel / Gleichgewichtsstörungen")+yn(a+".druck","Druckgefühl im Ohr")+yn(a+".hyper","Geräuschempfindlichkeit")+yn(a+".schmerz","Ohrenschmerzen")+yn(a+".ausfluss","Ausfluss aus dem Ohr")+yn(a+".puls","Pulsierendes Ohrgeräusch"))+
@@ -261,7 +322,7 @@ function stepAbschluss(){
  return (S.oto.sent?`<div class="okbox"><b>Laborauftrag gesendet</b><span>Otoplastik für ${esc(n)} steht im Labor-Reiter der Aufgaben – Schritt 1: Abformung reinigen.</span></div>`:"")+card("Aufgaben direkt anlegen",`<p class="muted">Ein Klick legt die Aufgabe in der Aufgaben-App an – mit Kunde, Telefon und Gerät verknüpft.</p>
   <div class="quick">${quick.map(([id,l,t,c])=>{const done=S.tasks.find(x=>x.id===id);return `<button type="button" class="qbtn" data-task="${id}" data-title="${esc(t)}" data-cat="${c}" ${done?"disabled":""}>${done?"✓ ":"+ "}${l}</button>`}).join("")}</div>
   ${S.tasks.length?`<div class="tlist">${S.tasks.map(t=>`<div><span class="tile t-kunden">✓</span><div><b>${esc(t.title)}</b><small>${esc(t.cat)} · fällig ${esc(t.due)} · erscheint in „Aufgaben“</small></div></div>`).join("")}</div>`:""}`)+
- card("Termin",`<div class="audtop"><button class="btn" disabled>Termin in AkuWin anlegen <span class="soon">bald</span></button><span class="muted">Freie Zeiten sehen und den Anpasstermin direkt mit dem Kunden vereinbaren.</span></div>`)+
+ termineCard()+
  card("Broschüre für den Kunden",`<div class="brochure"><div class="bthumb"><span>Hörakustik Daugsch</span><b>Ihre persönliche Hörberatung</b><small>${esc(n)}</small></div>
   <div><p>Die Broschüre fasst alles zusammen: Hörsituation, Audiogramm, Hörprofil, Wünsche und Hörziele, Empfehlung mit Leistungsprofil, Preisorientierung und die Übersicht aller sechs Technikstufen – gestaltet für den Druck auf A4.</p>
   <button class="btn primary" data-brochure>Broschüre erstellen</button></div></div>`)+card("Beratung abschließen",`<p class="muted">${S.status==="abgeschlossen"?"Diese Beratung ist abgeschlossen.":"Alles wird laufend gespeichert. Mit „Abschließen“ markierst du die Beratung als fertig."}</p><button class="btn ${S.status==="abgeschlossen"?"":"primary"}" data-finish>${S.status==="abgeschlossen"?"Wieder öffnen":"Beratung abschließen"}</button>`);
@@ -336,7 +397,7 @@ async function openConsultation(id){
  const r=await H().sb.from("consultations").select("*").eq("id",id).maybeSingle();
  if(r.error||!r.data){toast("Beratung konnte nicht geladen werden");return}
  S=Object.assign(empty(),r.data.data||{});S.kunde=Object.assign(empty().kunde,S.kunde||{});S.an=Object.assign(empty().an,S.an||{});S.oto=Object.assign(empty().oto,S.oto||{});
- AK.q="";AK.res=null;AK.audios=null;cid=id;mode="edit";step=0;customer=false;H().rerender();window.scrollTo(0,0);
+ AK.q="";AK.res=null;AK.audios=null;AK.upcoming=null;cid=id;mode="edit";step=0;customer=false;H().rerender();window.scrollTo(0,0);
 }
 async function delConsultation(id){
  const x=(list||[]).find(c=>c.id===id),n=x&&x.customer_name||"ohne Namen";
@@ -345,7 +406,7 @@ async function delConsultation(id){
  if(error){toast("Löschen fehlgeschlagen: "+error.message);return}
  list=list.filter(c=>c.id!==id);H().rerender();toast("Beratung gelöscht");
 }
-function newConsultation(){AK.q="";AK.res=null;AK.audios=null;S=empty();cid=uid();mode="edit";step=0;customer=false;dirty=false;H().rerender();window.scrollTo(0,0)}
+function newConsultation(){AK.q="";AK.res=null;AK.audios=null;AK.upcoming=null;S=empty();cid=uid();mode="edit";step=0;customer=false;dirty=false;H().rerender();window.scrollTo(0,0)}
 
 /* ---------- Aufgaben & Labor ---------- */
 const isoD=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -541,6 +602,7 @@ p{margin:0;font-size:11pt;line-height:1.55}
 .contact{margin-top:auto;background:#1B493B;color:#fff;border-radius:6mm;padding:8mm;display:grid;grid-template-columns:1fr 1.15fr;gap:8mm}
 .contact b{font-size:13pt}.contact p{color:#D5E0DC;font-size:10.5pt}.contact .clogo{width:52mm;display:block;margin-bottom:5mm}
 .contact table{font-size:10pt;color:#D5E0DC;border-collapse:collapse}.contact td:last-child{white-space:nowrap}.contact td{padding:.8mm 4mm .8mm 0;vertical-align:top}
+.appts{border:.3mm solid #DCE6E2;border-radius:5mm;padding:5mm 6mm;display:flex;flex-direction:column;gap:3mm;background:#F6F9F7}.appts b{font-size:11pt}.appts table{border-collapse:collapse;width:100%;font-size:10pt}.appts td{padding:2mm 2mm;border-bottom:.3mm solid #DCE6E2}.appts td:first-child{font-weight:700;color:#1B493B}.appts small{font-size:8.5pt;color:#587168}
 .notes{border:.3mm solid #DCE6E2;border-radius:5mm;padding:5mm 6mm;display:flex;flex-direction:column;gap:7mm}.notes b{font-size:11pt}.notes span{display:block;border-bottom:.3mm solid #DCE6E2;height:0}
 .wish{display:grid;grid-template-columns:1fr 1fr;gap:4mm}.wish div{background:#EEF3F1;border-radius:5mm;padding:5mm}.wish small{display:block;font-size:9pt;color:#587168;margin-bottom:1mm}.wish b{font-size:12pt}
 footer img{height:7mm}
@@ -617,7 +679,7 @@ footer img{height:7mm}
 <section class="page"><div class="in">
  <span class="kick">08 · Ihre nächsten Schritte</span><h2>So geht es weiter</h2>
  <ol class="steps">${NEXT.map(([t,d],i)=>`<li><i>${i+1}</i><div><b>${t}</b><p>${d}</p></div></li>`).join("")}</ol>
- <div class="notes"><b>Ihre Notizen</b><span></span><span></span><span></span><span></span></div>
+ ${(S.termine||[]).length?`<div class="appts"><b>Ihre Termine bei uns</b><table>${S.termine.slice(0,6).map(a=>`<tr><td>${esc(new Date(a.start.slice(0,10)+"T12:00").toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"}))}</td><td>${hmT(a.start)} Uhr</td><td>${esc(a.type)}</td>${a.res?`<td>bei ${esc(a.res)}</td>`:"<td></td>"}</tr>`).join("")}</table><small>Bitte geben Sie uns rechtzeitig Bescheid, falls Sie einen Termin nicht wahrnehmen können: ${FIRMA.tel}</small></div>`:`<div class="notes"><b>Ihre Notizen</b><span></span><span></span><span></span><span></span></div>`}
  <div class="contact"><div><img class="clogo" src="img/logo-weiss.png" alt="Hörakustik Daugsch"><b>${FIRMA.person}</b><p>${FIRMA.rolle}</p><p style="margin-top:3mm">${FIRMA.str}<br>${FIRMA.ort}</p></div>
   <div><table><tr><td>Telefon</td><td>${FIRMA.tel}</td></tr><tr><td>E-Mail</td><td>${FIRMA.mail}</td></tr><tr><td>Web</td><td>${FIRMA.web}</td></tr></table>
   <p style="margin:4mm 0 1mm;color:#fff;font-weight:700">Öffnungszeiten</p><table>${FIRMA.zeiten.map(z=>`<tr><td>${z[0]}</td><td>${z[1]}</td></tr>`).join("")}</table></div></div>
@@ -656,6 +718,9 @@ document.addEventListener("click",e=>{
  if(d.task){createTask(d.task,d.title,d.cat);return}
  if(d.otosame!=null){S.oto.same=d.otosame==="1";if(!S.oto.same)S.oto.L=JSON.parse(JSON.stringify(S.oto.R));changed();rr();return}
  if(d.akpick){akPick(d.akpick);return}
+ if(d.tftype){const ty=(AK.meta&&AK.meta.types||[]).find(x=>x.id===d.tftype);S.tf=S.tf||{};S.tf.typeId=d.tftype;if(ty)S.tf.minutes=ty.minutes;changed();rr();return}
+ if(d.tfres){S.tf=S.tf||{};S.tf.res=d.tfres;changed();rr();return}
+ if(d.tfcreate!=null){tfCreate();return}
  if(d.akload!=null||d.akreload!=null){akLoadAudios(true);return}
  if(d.akaud){const a=(AK.audios||[]).find(x=>x.guid===d.akaud);if(a){applyAudiogram(a);changed();rr();toast("Audiogramm vom "+fmtD(a.date)+" übernommen")}return}
  if(d.akunlink!=null){delete S.kunde.akuwinId;if(S.audioSrc){S.audio={R:{},L:{}};S.audioBC=null}S.audioSrc=null;AK.audios=null;changed();rr();return}
