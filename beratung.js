@@ -233,8 +233,8 @@ function stepOto(){
   ${both?`<div class="q"><span class="ql">Ausführung</span><div class="chips"><button type="button" class="chip" data-otosame="1" aria-pressed="${o.same}">Beide Seiten gleich</button><button type="button" class="chip" data-otosame="0" aria-pressed="${!o.same}">Seiten unterschiedlich</button></div></div>`:""}
   ${two?`<div class="ears2"><div><h4 class="ear R">Rechts</h4>${earOto("R")}</div><div><h4 class="ear L">Links</h4>${earOto("L")}</div></div>`:earOto(o.sides==="links"?"L":"R")}
   <div class="form">${ta("oto.notes","Hinweise fürs Labor","z. B. Kunde wünscht diskrete Farbe")}</div>
-  <div class="q"><span class="ql">Wer übernimmt?</span>${window.HD_LABOR?window.HD_LABOR.whoChips(o.assignee===undefined?H().me?.id:o.assignee,"data-otowho"):""}</div>
-  <div class="nav2"><span class="muted">Der Auftrag erscheint im Labor (${LSTEPS.join(" → ")}) und als Aufgabe bei der gewählten Person.</span><button class="btn primary" data-otosend>Auftrag ans Labor senden</button></div>`);
+  <div class="q"><span class="ql">Wer macht den ersten Schritt?</span>${window.HD_LABOR?window.HD_LABOR.whoChips(o.assignee===undefined?H().me?.id:o.assignee,"data-otowho"):""}</div>
+  <div class="nav2"><span class="muted">Der Auftrag erscheint im Labor (${LSTEPS.join(" → ")}) und als Eingangsmeldung („Otoplastik-Auftrag im Labor eingegangen“) bei der Person, die den ersten Schritt macht.</span><button class="btn primary" data-otosend>Auftrag ans Labor senden</button></div>`);
 }
 /* ---------- Kundenansicht ---------- */
 function customerView(){

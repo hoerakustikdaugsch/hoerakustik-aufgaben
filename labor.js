@@ -51,21 +51,22 @@ const whoChips=(cur,attr)=>{const team=H().team()||[];return team.length?`<div c
 const whoName=id=>(H().team()||[]).find(m=>m.id===id)?.name||"";
 const whoIni=id=>whoName(id).split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase();
 const sidesTxt=o=>o.sides==="beide"?"beidseitig":o.sides==="links"?"links":"rechts";
-function taskDue(o){if(o.due){const d=new Date(o.due+"T12:00");d.setDate(d.getDate()-1);const t=new Date();t.setHours(12,0,0,0);return iso(d<t?t:d)}const d=new Date();d.setDate(d.getDate()+3);return iso(d)}
-/* legt die Aufgabe an bzw. hält sie aktuell: Zuständig, Termin, Status (fertig → erledigt) */
+const taskTitle=o=>"Otoplastik-Auftrag im Labor eingegangen – "+o.customer;
+/* Eingangsmeldung: neue Aufgabe „Otoplastik-Auftrag im Labor eingegangen – Kunde“ bei der Person, die den ersten Schritt macht.
+   Erledigt sich, sobald im Labor der erste Schritt abgehakt ist (bzw. bei Übergabe); zurück auf Anfang → wieder offen. */
 async function syncTask(o){
  if(!o||!o.id||!H().saveTask)return;
  const all=H().tasks||[],ex=all.find(t=>t.labOrderId===o.id);
- const finished=!!o.delivered_at||o.stage>=6;
+ const finished=!!o.delivered_at||o.stage>=1;
  if(!ex){if(finished||!o.assignee)return;
-  const t={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),title:"Otoplastik fertigen ("+sidesTxt(o)+")",category:"Otoplastik",assignee:o.assignee,due:taskDue(o),
-   priority:o.urgent?"hoch":"normal",status:"offen",customer:o.customer,phone:o.phone||"",notes:[summary(o),o.notes].filter(Boolean).join(" · "),labOrderId:o.id,consultationId:o.consultation_id||null,createdAt:Date.now()};
+  const t={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),title:taskTitle(o),category:"Otoplastik",assignee:o.assignee,due:iso(new Date()),
+   priority:o.urgent?"hoch":"normal",status:"offen",customer:o.customer,phone:o.phone||"",notes:["Bitte im Labor bearbeiten: "+[sidesTxt(o),summary(o)].filter(Boolean).join(", "),o.due?"Anpassung "+dueLabel(o.due):"",o.notes].filter(Boolean).join(" · "),labOrderId:o.id,consultationId:o.consultation_id||null,createdAt:Date.now()};
   await H().saveTask(t,null);return}
- const nt={...ex,customer:o.customer,phone:o.phone||ex.phone,priority:o.urgent?"hoch":ex.priority==="hoch"?"normal":ex.priority,due:taskDue(o)};
+ const nt={...ex,title:taskTitle(o),customer:o.customer,phone:o.phone||ex.phone,priority:o.urgent?"hoch":ex.priority==="hoch"?"normal":ex.priority};
  if(o.assignee!==undefined)nt.assignee=o.assignee||"";
  if(finished&&ex.status!=="erledigt"){nt.status="erledigt";nt.prevStatus=ex.status;nt.doneAt=Date.now()}
  if(!finished&&ex.status==="erledigt"){nt.status=ex.prevStatus||"offen";nt.prevStatus=null;nt.doneAt=null}
- const same=["customer","phone","priority","due","assignee","status"].every(k=>(nt[k]||"")===(ex[k]||""));
+ const same=["title","customer","phone","priority","assignee","status"].every(k=>(nt[k]||"")===(ex[k]||""));
  if(!same)await H().saveTask(nt,ex);
 }
 const meName=()=>{const me=H().me;return(H().team().find(t=>t.id===me?.id)?.name)||me?.email||""};
@@ -144,7 +145,7 @@ function formHtml(){
  return `<h3>${f.id?"Laborauftrag bearbeiten":"Neuer Laborauftrag"}</h3>
  <div class="lgrid"><label>Kunde<input data-lf-in="customer" value="${esc(f.customer)}" required placeholder="Vor- und Nachname"></label><label>Telefon<input data-lf-in="phone" value="${esc(f.phone||"")}" type="tel"></label>
   <label>Anpasstermin<input data-lf-in="due" type="date" value="${esc(f.due||"")}"></label>
-  <div class="lq inline full"><span class="lql">Wer übernimmt?</span>${whoChips(f.assignee,"data-lf-who")}</div><div class="lq inline"><span class="lql">Priorität</span><div class="chips"><button type="button" class="chip" data-lf-urgent aria-pressed="${!!f.urgent}">Eilig</button></div></div></div>
+  <div class="lq inline full"><span class="lql">Wer macht den ersten Schritt?</span>${whoChips(f.assignee,"data-lf-who")}</div><div class="lq inline"><span class="lql">Priorität</span><div class="chips"><button type="button" class="chip" data-lf-urgent aria-pressed="${!!f.urgent}">Eilig</button></div></div></div>
  <div class="lsec"><h4>Abformung</h4>${row("Datum",`<input data-lf-in="spec.abformung.datum" type="date" value="${esc(s.abformung?.datum||"")}">`)}${row("Material",chips("spec.abformung.masse",OPT.masse))}${row("Qualität",chips("spec.abformung.qualitaet",OPT.qualitaet))}
   ${row("Besonderheiten",`<input data-lf-in="spec.abformung.besonderheiten" value="${esc(s.abformung?.besonderheiten||"")}" placeholder="z. B. enger 2. Knick, Exostose rechts">`)}</div>
  <div class="lsec"><h4>Otoplastik</h4>${row("Seite",chips("sides",["rechts","links","beide"]))}
@@ -223,5 +224,5 @@ document.addEventListener("click",e=>{
  const o=el.closest("[data-l-open]");if(o){openDetail(o.dataset.lOpen);return}
 },true);
 
-window.HD_LABOR={render,load,openForm,syncTask,whoChips,STEPS,COLS,OPT,state:st,openCount:()=>st.orders.filter(o=>!o.delivered_at).length,lateCount:()=>st.orders.filter(o=>!o.delivered_at&&o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length};
+window.HD_LABOR={render,load,openForm,openDetail,syncTask,whoChips,STEPS,COLS,OPT,state:st,openCount:()=>st.orders.filter(o=>!o.delivered_at).length,lateCount:()=>st.orders.filter(o=>!o.delivered_at&&o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length};
 })();

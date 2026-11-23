@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.7.0 · Löschen & Labor-Aufgaben";
+const VERSION="1.7.1 · Labor-Eingangsmeldung";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -265,7 +265,7 @@ document.addEventListener("click",e=>{
  const tb=el.closest("[data-tab]");if(tb){tab=tb.dataset.tab;render();return}
  const p=el.closest("[data-person]");if(p){person=p.dataset.person;ls.set("person",person);render();return}
  const c=el.closest("[data-cat]");if(c){cat=c.dataset.cat;ls.set("cat",cat);render();return}
- const o=el.closest("[data-open]");if(o){const t=tasks.find(x=>x.id===o.dataset.open);if(t)openForm(t);return}
+ const o=el.closest("[data-open]");if(o){const t=tasks.find(x=>x.id===o.dataset.open);if(t)openTask(t);return}
  const art=el.closest(".task");if(!art)return;
  const t=tasks.find(x=>x.id===art.dataset.id);if(!t)return;
  if(el.closest("[data-check]")){
@@ -278,8 +278,14 @@ document.addEventListener("click",e=>{
   if(reduced()){commit();return}
   art.classList.add(done?"leaving":"leaving back");art.style.height=art.offsetHeight+"px";
   requestAnimationFrame(()=>art.classList.add("go"));setTimeout(commit,380);return}
- openForm(t);
+ openTask(t);
 });
+/* Labor-Eingangsmeldung öffnet direkt den Auftrag in der Labormaske */
+function openTask(t){
+ const L=window.HD_LABOR;
+ if(t.labOrderId&&L&&L.state.orders.some(o=>o.id===t.labOrderId)){go("labor");setTimeout(()=>L.openDetail(t.labOrderId),60);return}
+ openForm(t);
+}
 document.addEventListener("change",e=>{if(e.target.id==="catSel"){cat=e.target.value;ls.set("cat",cat);render()}});
 document.addEventListener("input",e=>{if(e.target.id==="q"){q=e.target.value.trim().toLowerCase();render()}});
 $("addBtn").onclick=$("fab").onclick=()=>openForm();
