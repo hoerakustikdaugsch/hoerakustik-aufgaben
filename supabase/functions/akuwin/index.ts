@@ -8,8 +8,6 @@
 //     AKUWIN_USER         API-Benutzer
 //     AKUWIN_PASSWORD     Passwort (trägt der Inhaber selbst ein)
 //     AKUWIN_CERT_SHA256  Fingerabdruck des Server-Zertifikats (aus action "diag")
-import tls from "node:tls";
-import { Buffer } from "node:buffer";
 
 const BASE = (Deno.env.get("AKUWIN_URL") ?? "https://20155.ipnhosting.de:25850/akuwin-api").replace(/\/+$/, "");
 const PIN = (Deno.env.get("AKUWIN_CERT_SHA256") ?? "").replace(/[^0-9a-f]/gi, "").toLowerCase();
@@ -41,43 +39,94 @@ function dechunk(b: Uint8Array): Uint8Array {
   return new Uint8Array(out);
 }
 
-// HTTP/1.1 über TLS mit Zertifikat-Pinning (ohne öffentliche CA-Prüfung)
-function raw(method: string, path: string, headers: Record<string, string> = {}, body?: string, pin = true): Promise<Raw> {
+// ---------- Zertifikat ----------
+// Der AkuWin-Server nutzt ein selbst ausgestelltes Zertifikat auf "localhost". Es wird einmalig aus dem
+// TLS-1.2-Handshake gelesen (Certificate-Nachricht ist dort unverschlüsselt) und danach als EINZIGER
+// vertrauenswürdiger Aussteller verwendet. Damit akzeptiert die Verbindung nur genau dieses Zertifikat (Pinning).
+const TLS_NAME = Deno.env.get("AKUWIN_TLS_NAME") ?? "localhost";
+let CERT_PEM = (Deno.env.get("AKUWIN_CERT_PEM") ?? "").replace(/\\n/g, "\n").trim();
+const u8 = (...a: number[]) => new Uint8Array(a);
+function cat(...p: Uint8Array[]) { const o = new Uint8Array(p.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of p) { o.set(x, i); i += x.length; } return o; }
+const len2 = (n: number) => u8(n >> 8 & 255, n & 255), len3 = (n: number) => u8(n >> 16 & 255, n >> 8 & 255, n & 255);
+const ext = (t: number, d: Uint8Array) => cat(len2(t), len2(d.length), d);
+async function fetchCertDer(host: string, port: number): Promise<Uint8Array> {
+  const sni = new TextEncoder().encode(host);
+  const suites = [0xc02f, 0xc030, 0xc02b, 0xc02c, 0xc027, 0xc028, 0xc013, 0xc014, 0x009c, 0x009d, 0x003c, 0x002f, 0x0035];
+  const exts = cat(
+    ext(0x0000, cat(len2(sni.length + 3), u8(0), len2(sni.length), sni)),
+    ext(0x000a, cat(len2(6), len2(0x0017), len2(0x0018), len2(0x001d))),
+    ext(0x000b, u8(1, 0)),
+    ext(0x000d, cat(len2(18), u8(4, 1, 5, 1, 6, 1, 4, 3, 5, 3, 8, 4, 8, 5, 8, 6, 2, 1))),
+    ext(0xff01, u8(0)),
+  );
+  const body = cat(u8(3, 3), crypto.getRandomValues(new Uint8Array(32)), u8(0), len2(suites.length * 2), ...suites.map(len2), u8(1, 0), len2(exts.length), exts);
+  const hs = cat(u8(1), len3(body.length), body);
+  const rec = cat(u8(0x16, 3, 1), len2(hs.length), hs);
+  const c = await Deno.connect({ hostname: host, port });
+  try {
+    await c.write(rec);
+    let buf = new Uint8Array(0), hsBuf = new Uint8Array(0);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 15000) {
+      const chunk = new Uint8Array(16384); const n = await c.read(chunk); if (!n) break;
+      buf = cat(buf, chunk.slice(0, n));
+      while (buf.length >= 5) {
+        const l = buf[3] << 8 | buf[4]; if (buf.length < 5 + l) break;
+        const type = buf[0], frag = buf.slice(5, 5 + l); buf = buf.slice(5 + l);
+        if (type === 0x15) throw new Error("Server hat den TLS-1.2-Aufbau abgelehnt (Alert " + frag[1] + ")");
+        if (type === 0x16) hsBuf = cat(hsBuf, frag);
+      }
+      let i = 0;
+      while (i + 4 <= hsBuf.length) {
+        const ht = hsBuf[i], hl = hsBuf[i + 1] << 16 | hsBuf[i + 2] << 8 | hsBuf[i + 3];
+        if (i + 4 + hl > hsBuf.length) break;
+        if (ht === 11) { const m = hsBuf.slice(i + 4, i + 4 + hl); const cl = m[3] << 16 | m[4] << 8 | m[5]; return m.slice(6, 6 + cl); }
+        i += 4 + hl;
+      }
+    }
+    throw new Error("Kein Zertifikat im Handshake gefunden");
+  } finally { try { c.close(); } catch { /* */ } }
+}
+const toPem = (der: Uint8Array) => "-----BEGIN CERTIFICATE-----\n" + btoa(String.fromCharCode(...der)).match(/.{1,64}/g)!.join("\n") + "\n-----END CERTIFICATE-----";
+const pemDer = (pem: string) => Uint8Array.from(atob(pem.replace(/-----[^-]+-----|\s/g, "")), (c) => c.charCodeAt(0));
+const sha256 = async (b: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", b))].map((x) => x.toString(16).padStart(2, "0")).join(":").toUpperCase();
+async function certPem(): Promise<string> {
+  if (CERT_PEM) return CERT_PEM;
+  const u = new URL(BASE);
+  const pem = toPem(await fetchCertDer(u.hostname, Number(u.port) || 443));
+  // Nur übernehmen, wenn der Fingerabdruck zum hinterlegten Pin passt (falls einer hinterlegt ist)
+  if (PIN && (await sha256(pemDer(pem))).replace(/:/g, "").toLowerCase() !== PIN) throw new Error("Zertifikat passt nicht zum hinterlegten Fingerabdruck");
+  CERT_PEM = pem;
+  return pem;
+}
+
+// HTTP/1.1 über TLS – vertraut ausschließlich dem AkuWin-Zertifikat
+async function raw(method: string, path: string, headers: Record<string, string> = {}, body?: string, needPin = true): Promise<Raw> {
   const u = new URL(BASE + path);
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let cert: Record<string, unknown> = {};
-    const timer = setTimeout(() => { sock.destroy(); reject(new Error("Zeitüberschreitung bei AkuWin")); }, 20000);
-    const sock = tls.connect({ host: u.hostname, port: Number(u.port) || 443, servername: u.hostname, rejectUnauthorized: false }, () => {
-      // deno-lint-ignore no-explicit-any
-      const pc: any = sock.getPeerCertificate(true) || {};
-      const fp = String(pc.fingerprint256 || "").replace(/[^0-9a-f]/gi, "").toLowerCase();
-      cert = { subject: pc.subject, issuer: pc.issuer, valid_from: pc.valid_from, valid_to: pc.valid_to, fingerprint256: pc.fingerprint256, subjectaltname: pc.subjectaltname,
-        pem: pc.raw ? "-----BEGIN CERTIFICATE-----\n" + Buffer.from(pc.raw).toString("base64").match(/.{1,64}/g)!.join("\n") + "\n-----END CERTIFICATE-----" : undefined };
-      if (pin && (!PIN || fp !== PIN)) { clearTimeout(timer); sock.destroy(); reject(Object.assign(new Error(PIN ? "Zertifikat passt nicht zum hinterlegten Fingerabdruck" : "Kein Zertifikat-Fingerabdruck hinterlegt"), { cert })); return; }
-      const bodyBuf = body != null ? Buffer.from(body) : null;
-      const h: Record<string, string> = { Host: u.host, Connection: "close", Accept: "application/json", "User-Agent": "hd-portal/1", ...headers };
-      if (bodyBuf) h["Content-Length"] = String(bodyBuf.length);
-      sock.write(`${method} ${u.pathname}${u.search} HTTP/1.1\r\n` + Object.entries(h).map(([k, v]) => `${k}: ${v}`).join("\r\n") + "\r\n\r\n");
-      if (bodyBuf) sock.write(bodyBuf);
-    });
-    sock.on("data", (d: Buffer) => chunks.push(d));
-    sock.on("error", (e: Error) => { clearTimeout(timer); reject(Object.assign(e, { cert })); });
-    sock.on("end", () => {
-      clearTimeout(timer);
-      const all = new Uint8Array(Buffer.concat(chunks));
-      let sep = -1;
-      for (let i = 0; i < all.length - 3; i++) if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
-      if (sep < 0) { reject(Object.assign(new Error("Ungültige Antwort von AkuWin"), { cert })); return; }
-      const head = new TextDecoder().decode(all.slice(0, sep)).split("\r\n");
-      const status = Number(head[0].split(" ")[1]);
-      const hs: Record<string, string> = {};
-      for (const l of head.slice(1)) { const i = l.indexOf(":"); if (i > 0) hs[l.slice(0, i).trim().toLowerCase()] = l.slice(i + 1).trim(); }
-      let b = all.slice(sep + 4);
-      if ((hs["transfer-encoding"] || "").includes("chunked")) b = dechunk(b);
-      resolve({ status, headers: hs, body: b, cert });
-    });
-  });
+  if (needPin && !PIN) throw new Error("Kein Zertifikat-Fingerabdruck hinterlegt (Secret AKUWIN_CERT_SHA256)");
+  const pem = await certPem();
+  const tcp = await Deno.connect({ hostname: u.hostname, port: Number(u.port) || 443 });
+  const conn = await Deno.startTls(tcp, { hostname: TLS_NAME, caCerts: [pem] });
+  const timer = setTimeout(() => { try { conn.close(); } catch { /* */ } }, 25000);
+  try {
+    const bodyBuf = body != null ? new TextEncoder().encode(body) : null;
+    const h: Record<string, string> = { Host: u.host, Connection: "close", Accept: "application/json", "User-Agent": "hd-portal/1", ...headers };
+    if (bodyBuf) h["Content-Length"] = String(bodyBuf.length);
+    await conn.write(new TextEncoder().encode(`${method} ${u.pathname}${u.search} HTTP/1.1\r\n` + Object.entries(h).map(([k, v]) => `${k}: ${v}`).join("\r\n") + "\r\n\r\n"));
+    if (bodyBuf) await conn.write(bodyBuf);
+    let all = new Uint8Array(0);
+    while (true) { const b = new Uint8Array(32768); let n: number | null = null; try { n = await conn.read(b); } catch { break; } if (!n) break; all = cat(all, b.slice(0, n)); }
+    let sep = -1;
+    for (let i = 0; i < all.length - 3; i++) if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
+    if (sep < 0) throw new Error("Ungültige Antwort von AkuWin");
+    const head = new TextDecoder().decode(all.slice(0, sep)).split("\r\n");
+    const status = Number(head[0].split(" ")[1]);
+    const hs: Record<string, string> = {};
+    for (const l of head.slice(1)) { const i = l.indexOf(":"); if (i > 0) hs[l.slice(0, i).trim().toLowerCase()] = l.slice(i + 1).trim(); }
+    let b = all.slice(sep + 4);
+    if ((hs["transfer-encoding"] || "").includes("chunked")) b = dechunk(b);
+    return { status, headers: hs, body: b, cert: {} };
+  } finally { clearTimeout(timer); try { conn.close(); } catch { /* */ } }
 }
 const text = (r: Raw) => new TextDecoder().decode(r.body);
 
@@ -123,50 +172,13 @@ Deno.serve(async (req) => {
   if (!user) return json({ error: "Nicht angemeldet" }, 401);
   try {
     if (p.action === "diag") {
-      // liest nur das Zertifikat und die Erreichbarkeit – sendet keine Zugangsdaten
-      let reach: unknown = null, cert: unknown = null;
-      try { const r = await raw("GET", "/swagger/index.html", {}, undefined, false); reach = r.status; cert = r.cert; } catch (e) { reach = String(e); cert = (e as { cert?: unknown }).cert; }
-      return json({ base: BASE, pinned: !!PIN, pinMatches: PIN && cert ? String((cert as { fingerprint256?: string }).fingerprint256 || "").replace(/[^0-9a-f]/gi, "").toLowerCase() === PIN : null,
-        hasUser: !!USER, hasPassword: !!PASS, reach, cert });
-    }
-    if (p.action === "diag2") {
-      // probiert verschiedene TLS-Wege (ohne Zugangsdaten) und meldet die genauen Fehler
-      const u = new URL(BASE);
-      const port = Number(u.port) || 443;
-      const out: Record<string, unknown> = {};
-      const req1 = `GET ${u.pathname}/swagger/index.html HTTP/1.1\r\nHost: ${u.host}\r\nConnection: close\r\n\r\n`;
-      const readAll = async (c: Deno.Conn) => { const buf = new Uint8Array(4096); const n = await c.read(buf); return new TextDecoder().decode(buf.slice(0, n || 0)).split("\r\n")[0]; };
-      // A: Deno.connectTls normal
-      try { const c = await Deno.connectTls({ hostname: u.hostname, port }); await c.write(new TextEncoder().encode(req1)); out.A = await readAll(c); c.close(); } catch (e) { out.A = String(e); }
-      // B: TCP + startTls mit Namen "localhost" (Zertifikat lautet auf localhost)
-      try { const t = await Deno.connect({ hostname: u.hostname, port }); const c = await Deno.startTls(t, { hostname: "localhost" }); await c.write(new TextEncoder().encode(req1)); out.B = await readAll(c); c.close(); } catch (e) { out.B = String(e); }
-      // C: node:https mit rejectUnauthorized:false
+      // liest das Zertifikat und prüft die Verbindung – sendet keine Zugangsdaten
+      const out: Record<string, unknown> = { base: BASE, tlsName: TLS_NAME, pinned: !!PIN, hasUser: !!USER, hasPassword: !!PASS, certFromSecret: !!(Deno.env.get("AKUWIN_CERT_PEM")) };
       try {
-        const https = await import("node:https");
-        out.C = await new Promise((res) => {
-          const r = https.request({ host: u.hostname, port, path: u.pathname + "/swagger/index.html", method: "GET", rejectUnauthorized: false }, (resp) => {
-            // deno-lint-ignore no-explicit-any
-            const sock: any = resp.socket; let x509: unknown = null;
-            try { const c = sock.getPeerX509Certificate?.(); if (c) x509 = { fp: c.fingerprint256, subject: c.subject, issuer: c.issuer, validTo: c.validTo, pem: c.toString() }; } catch (e) { x509 = String(e); }
-            res({ status: resp.statusCode, x509 }); resp.resume();
-          });
-          r.on("error", (e) => res(String(e))); r.setTimeout(15000, () => { r.destroy(); res("timeout"); }); r.end();
-        });
-      } catch (e) { out.C = String(e); }
-      // D: node:tls, warten auf secureConnect, X509 auslesen
-      try {
-        out.D = await new Promise((res) => {
-          const s = tls.connect({ host: u.hostname, port, servername: u.hostname, rejectUnauthorized: false });
-          const to = setTimeout(() => { s.destroy(); res("timeout"); }, 15000);
-          s.on("secureConnect", () => {
-            // deno-lint-ignore no-explicit-any
-            const a: any = s; let x: unknown = null;
-            try { const c = a.getPeerX509Certificate?.(); if (c) x = { fp: c.fingerprint256, pem: c.toString() }; } catch (e) { x = String(e); }
-            res({ authorized: a.authorized, authError: String(a.authorizationError || ""), x509: x }); clearTimeout(to); s.destroy();
-          });
-          s.on("error", (e: Error) => { clearTimeout(to); res("error: " + String(e)); });
-        });
-      } catch (e) { out.D = String(e); }
+        const pem = await certPem(); const fp = await sha256(pemDer(pem));
+        out.fingerprint256 = fp; out.pinMatches = PIN ? fp.replace(/:/g, "").toLowerCase() === PIN : null; out.pem = pem;
+      } catch (e) { out.certError = String(e); }
+      try { const r = await raw("GET", "/swagger/index.html", {}, undefined, false); out.reach = r.status; } catch (e) { out.reach = String(e); }
       return json(out);
     }
     if (p.action === "swagger") {
