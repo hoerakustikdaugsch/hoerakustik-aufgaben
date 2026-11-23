@@ -193,7 +193,7 @@ function stepAudio(){
  const lock=!!(S.audioSrc&&S.audioSrc.from==="AkuWin");
  const row=e=>`<tr><th><span class="ear ${e}">${e==="R"?"Rechts ○":"Links ×"}</span></th>${FREQ.map(f=>`<td><input inputmode="numeric" data-aud="${e}.${f}" value="${esc(S.audio[e][f]??"")}" aria-label="${e==="R"?"Rechts":"Links"} ${f} Hz" ${lock?"readonly tabindex=\"-1\"":""}></td>`).join("")}</tr>`;
  const dR=degree(pta("R")),dL=degree(pta("L"));
- return card("Tonaudiogramm (Luftleitung)",`<div class="audtop">${S.kunde.akuwinId?`<button class="btn primary" data-akload ${AK.audLoading?"disabled":""}>${AK.audLoading?"Lädt …":"Aus AkuWin laden"}</button>`:`<button class="btn" data-step="0">Aus AkuWin laden</button>`}<span class="muted">${S.audioSrc?`<b class="aklock">🔒 Aus AkuWin · Messung vom ${esc(fmtD(S.audioSrc.date))} · nicht veränderbar</b>`:S.kunde.akuwinId?"Werte in dB HL eintragen oder aus AkuWin laden.":"Erst in Schritt 1 den Kunden aus AkuWin übernehmen – oder Werte in dB HL eintragen."}</span></div>
+ return card("Tonaudiogramm",`<div class="audtop">${S.kunde.akuwinId?`<button class="btn primary" data-akload ${AK.audLoading?"disabled":""}>${AK.audLoading?"Lädt …":"Aus AkuWin laden"}</button>`:`<button class="btn" data-step="0">Aus AkuWin laden</button>`}<span class="muted">${S.audioSrc?`<b class="aklock">🔒 Aus AkuWin · Messung vom ${esc(fmtD(S.audioSrc.date))} · nicht veränderbar</b>`:S.kunde.akuwinId?"Werte in dB HL eintragen oder aus AkuWin laden.":"Erst in Schritt 1 den Kunden aus AkuWin übernehmen – oder Werte in dB HL eintragen."}</span></div>
   ${AK.audios&&AK.audios.length>1?`<div class="q"><span class="ql">Messungen in AkuWin</span><div class="chips">${AK.audios.map(a=>`<button type="button" class="chip" data-akaud="${esc(a.guid)}" aria-pressed="${S.audioSrc&&S.audioSrc.guid===a.guid}">${esc(fmtD(a.date))}</button>`).join("")}</div></div>`:""}
   <div class="scroll"><table class="audt${lock?" locked":""}"><thead><tr><th></th>${FREQ.map(f=>`<th>${f>=1000?f/1000+" kHz":f+" Hz"}</th>`).join("")}</tr></thead><tbody>${row("R")}${row("L")}</tbody></table></div>
   <div id="audchart">${audioPair()}</div>
@@ -678,5 +678,5 @@ if(KUNDE){
  if(bc)bc.onmessage=ev=>{const m=ev.data;if(m&&m.type==="state"){S=m.S;custTab=m.custTab;SNAP_PRICES=m.prices;S.override=m.stage===recommend().idx?"":m.stage;renderKunde()}};
 }
 
-window.HD_BERATUNG={render};
+window.HD_BERATUNG={render,startWith:name=>{H().go("beratung");newConsultation();const n=String(name||"").replace(/,.*$/,"").trim();if(n){AK.q=n;akSearch(n);H().rerender()}}};
 })();

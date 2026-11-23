@@ -163,6 +163,34 @@ label{display:grid;gap:4px;font-size:14px;font-weight:600;color:var(--muted)}
 input,select,textarea{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;font-size:16px;min-height:46px;font-weight:400;color:var(--ink);width:100%}
 textarea{min-height:84px;resize:vertical}
 
+/* Kalender */
+.kbar{flex-wrap:wrap}.knav{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.knav .btn{min-width:40px}.ktitle{font-weight:700;color:var(--deep);margin-left:8px;font-size:17px}
+.kres{align-items:center}.ksync{margin-left:auto;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.kweek{background:#fff;border-radius:24px;padding:10px 12px 14px;overflow:hidden}
+.khead,.kallday{display:grid;grid-template-columns:52px repeat(var(--cols),minmax(0,1fr));gap:6px}
+.kdh{border:0;background:none;border-radius:14px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:0;cursor:pointer;color:var(--deep)}
+.kdh small{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.kdh b{font-size:20px}
+.kdh.today b{background:var(--forest);color:#fff;border-radius:99px;min-width:34px;padding:0 6px}.kdh:hover{background:#F1F6F4}
+.kallday>div{display:flex;flex-direction:column;gap:3px}
+.kgrid{position:relative;display:grid;grid-template-columns:52px repeat(var(--cols),minmax(0,1fr));gap:6px;margin-top:8px}
+.ktimes{position:relative}.ktimes span{position:absolute;right:6px;transform:translateY(-50%);font-size:12px;color:var(--muted)}
+.kcol{position:relative;border-left:1px solid #EEF3F1}.kcol.today{background:#F6FAF8;border-radius:10px}
+.kcol i{position:absolute;left:0;right:0;border-top:1px solid #EEF3F1}
+.know{position:absolute;left:-3px;right:0;border-top:2px solid #C0392B;z-index:3}.know::before{content:"";position:absolute;left:-4px;top:-5px;width:8px;height:8px;border-radius:50%;background:#C0392B}
+.kpos{position:absolute;z-index:2}.kpos .kap{height:100%}
+.kap{width:100%;text-align:left;border:0;border-left:4px solid color-mix(in srgb,var(--tc) 55%,#1B493B);background:color-mix(in srgb,var(--tc) 60%,#fff);border-radius:10px;padding:4px 8px;display:flex;flex-direction:column;gap:1px;overflow:hidden;cursor:pointer;color:var(--deep);font:inherit}
+.kap:hover{filter:brightness(.97);box-shadow:0 2px 8px rgba(27,73,59,.12)}
+.kap .kt{font-size:11.5px;font-weight:600;color:#3E5A51;line-height:1.25}.kap b{font-size:13.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kap .ktype{font-size:12px;color:#4F675F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kap.line{flex-direction:row;align-items:center;gap:6px;padding:2px 8px}.kap.line b{font-size:12.5px}.kap.line .kt{flex:none}
+.kap.cancel{opacity:.5}.kap.cancel b{text-decoration:line-through}
+.kstrip{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;background:#fff;border-radius:20px;padding:8px}
+.kstrip .kdh.on{background:var(--deep);color:#fff}.kstrip .kdh.on small{color:#CFE0DA}.kstrip .kdh i{font-style:normal;font-size:11px;color:var(--forest);font-weight:700;min-height:14px}.kstrip .kdh.on i{color:#fff}
+.kagenda{display:flex;flex-direction:column;gap:8px}.kagenda .kap{padding:10px 14px;border-radius:14px}.kagenda .kap b{font-size:15.5px;white-space:normal}.kagenda .kap .kt{font-size:13px}
+.ktoday .kagenda{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.kdet{max-width:520px}.kdtop{display:flex;align-items:flex-start;gap:12px}.kdtop>div{flex:1}.kdtop h3{margin:0}.kdtop p{margin:2px 0 0}
+.kdot{width:16px;height:16px;border-radius:50%;margin-top:6px;flex:none;border:1px solid rgba(0,0,0,.08)}
+.kdl{display:grid;grid-template-columns:90px 1fr;gap:8px 12px;margin:6px 0}.kdl dt{color:var(--muted)}.kdl dd{margin:0}.ksmall{font-size:13px;margin:0}
+@media(max-width:760px){.ktitle{width:100%;margin:4px 0 0}.ksync{width:100%;margin-left:0}}
 /* AkuWin in der Beratung */
 .bx .aksearch input{width:100%;font-size:17px;padding:12px 16px;border-radius:14px;border:1.5px solid var(--line,#D5E1DC);background:#fff}
 .bx .akres{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:10px}
@@ -215,7 +243,7 @@ footer button{background:none;border:0;color:var(--forest);font-weight:600;font-
  footer{padding-bottom:120px}
  .mainnav{display:none!important}
  .mobnav{display:flex;position:fixed;left:14px;right:14px;bottom:max(14px,env(safe-area-inset-bottom));height:66px;background:var(--deep);border-radius:22px;align-items:center;justify-content:space-around;padding:0 6px;box-shadow:0 12px 30px rgba(27,73,59,.35);z-index:10}
- .mobnav button{border:0;background:none;color:var(--pale);font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:14px;min-width:0;flex:1}
+ .mobnav button{border:0;background:none;color:var(--pale);font-size:10.5px;letter-spacing:-.01em;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:14px;min-width:0;flex:1}
  .mobnav button[aria-current=page]{color:#fff;background:rgba(255,255,255,.14)}
  .mobnav .plus{width:50px;height:50px;min-width:0;flex:none;border-radius:16px;background:#fff;color:var(--deep);justify-content:center}
 }
@@ -602,7 +630,7 @@ dialog.wide{width:min(860px,96vw)}
    <button data-go="beratung">Beratung</button>
    <button data-go="preise">Preise</button>
    <button data-go="labor">Labor <span class="cnt labcnt" hidden></span></button>
-   <button disabled>Kalender <span class="soon">bald</span></button>
+   <button data-go="kalender">Kalender</button>
   </nav>
   <div class="topright">
    <span class="sync off" id="sync"><i></i><span id="syncTxt">verbinde …</span></span>
@@ -623,6 +651,7 @@ dialog.wide{width:min(860px,96vw)}
   <button class="plus" id="fab" aria-label="Neue Aufgabe"><svg class="i" viewBox="0 0 24 24" style="width:26px;height:26px"><path d="M12 5v14M5 12h14"/></svg></button>
   <button data-go="beratung"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Beratung</button>
   <button data-go="preise"><svg class="i" viewBox="0 0 24 24"><path d="M17 6.5A6.5 6.5 0 1 0 17 17.5M4 10h9M4 14h9"/></svg>Preise</button>
+  <button data-go="kalender"><svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Kalender</button>
   <button data-go="labor"><span class="mi"><svg class="i" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5.5 9.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3M7.5 15h9"/></svg><span class="cnt labcnt" hidden></span></span>Labor</button>
   <button id="mobTeam" class="hidden"><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.6.8 2.6 2.6 3 5.2"/></svg>Team</button>
  </nav>
@@ -668,7 +697,7 @@ dialog.wide{width:min(860px,96vw)}
 /* Supabase-Bibliothek laden – fällt automatisch auf einen zweiten Server zurück, falls einer nicht erreichbar ist */
 (function(){
  var SRC=["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js","https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js","https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/supabase.min.js"];
- var APP=["app.js","preise.js","labor.js","beratung.js"];
+ var APP=["app.js","preise.js","labor.js","beratung.js","kalender.js"];
  function load(src,ok,fail,ms){var s=document.createElement("script"),done=false,t=setTimeout(function(){if(!done){done=true;s.remove();fail()}},ms||6000);
   s.src=src;s.onload=function(){if(done)return;done=true;clearTimeout(t);ok()};s.onerror=function(){if(done)return;done=true;clearTimeout(t);fail()};document.head.appendChild(s)}
  function app(i){if(i>=APP.length)return;var s=document.createElement("script");s.src=APP[i];s.async=false;s.onload=function(){app(i+1)};s.onerror=function(){app(i+1)};document.body.appendChild(s)}

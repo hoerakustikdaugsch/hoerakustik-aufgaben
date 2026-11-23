@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.8.0 · AkuWin: Kunde & Audiogramm";
+const VERSION="1.9.0 · Kalender & Audiogramm je Ohr";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -36,7 +36,7 @@ const show=v=>["setupView","loginView","pwView","nameView","appView"].forEach(x=
 
 let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
 $("ver").textContent=VERSION;
-window.HD={get tasks(){return tasks},saveTask:(t,b)=>save(t,b),esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),ask:(title,text,ok="Löschen")=>new Promise(res=>{const d=$("askDlg");$("askTitle").textContent=title;$("askText").textContent=text||"";$("askYes").textContent=ok;d.returnValue="";d.onclose=()=>res(d.returnValue==="yes");d.showModal();setTimeout(()=>$("askNo").focus(),30)}),
+window.HD={get tasks(){return tasks},newTask:p=>openForm(null,p),saveTask:(t,b)=>save(t,b),esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),ask:(title,text,ok="Löschen")=>new Promise(res=>{const d=$("askDlg");$("askTitle").textContent=title;$("askText").textContent=text||"";$("askYes").textContent=ok;d.returnValue="";d.onclose=()=>res(d.returnValue==="yes");d.showModal();setTimeout(()=>$("askNo").focus(),30)}),
  setTab:t=>{if(t==="labor"){go("labor");return}tab=t;render()},laborActive:()=>page==="labor"};
 
 /* ---------- Datenbank <-> App ---------- */
@@ -158,7 +158,7 @@ const emptyBox=txt=>`<div class="empty"><svg viewBox="0 0 120 50" width="120" he
 /* ---------- Seiten ---------- */
 function startPage(){
  const s=stats(),next=s.open.slice().sort(urgency).slice(0,5);
- return hero()+peopleRow()+
+ return hero()+(window.HD_KALENDER?window.HD_KALENDER.todayHtml():"")+peopleRow()+
   `<section class="list"><h3>Als Nächstes <small>${next.length}</small></h3>${next.length?next.map(card).join(""):emptyBox("Keine offenen Aufgaben.")}${s.open.length>5?`<button class="btn" data-go="aufgaben" style="align-self:flex-start">Alle ${s.open.length} Aufgaben ${svg("arrow")}</button>`:""}</section>`;
 }
 function tasksPage(){
@@ -196,7 +196,7 @@ function render(){
  document.querySelectorAll("[data-go]").forEach(b=>{if(b.closest(".mainnav,.mobnav")){const g=b.dataset.go;b.setAttribute("aria-current",(g===p&&!(g==="aufgaben"&&tab==="erledigt"))||(g==="erledigt"&&p==="aufgaben"&&tab==="erledigt")?"page":"false")}});
  const focus=document.activeElement&&document.activeElement.id==="q";
  const ln=window.HD_LABOR?window.HD_LABOR.openCount():0;document.querySelectorAll(".labcnt").forEach(x=>{x.textContent=ln||"";x.hidden=!ln});
- $("main").innerHTML=p==="aufgaben"?tasksPage():p==="labor"?laborPage():p==="preise"&&window.HD_PREISE?window.HD_PREISE.render():p==="beratung"&&window.HD_BERATUNG?window.HD_BERATUNG.render():startPage();
+ $("main").innerHTML=p==="aufgaben"?tasksPage():p==="labor"?laborPage():p==="kalender"?(window.HD_KALENDER?window.HD_KALENDER.render():emptyBox("Kalender wird geladen …")):p==="preise"&&window.HD_PREISE?window.HD_PREISE.render():p==="beratung"&&window.HD_BERATUNG?window.HD_BERATUNG.render():startPage();
  if(focus){const i=$("q");i.focus();i.setSelectionRange(i.value.length,i.value.length)}
  $("meLine").textContent="Angemeldet als "+(nameOf(me.id)||me.email);
 }
@@ -209,12 +209,12 @@ function go(target){
 /* ---------- Formular ---------- */
 const segSet=(id,v)=>$(id).querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===v));
 const segGet=id=>$(id).querySelector('[aria-pressed="true"]')?.dataset.v;
-function openForm(t){
+function openForm(t,pre){
  editing=t||null;
  $("formTitle").textContent=t?"Aufgabe bearbeiten":"Neue Aufgabe";
  $("f_cat").innerHTML=CATS.map(([g,cs])=>`<optgroup label="${esc(g)}">${cs.map(c=>`<option>${esc(c)}</option>`).join("")}</optgroup>`).join("");
  $("f_who").innerHTML=`<option value="">– niemand –</option>`+team.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("");
- const d=t||{category:CATS.flatMap(c=>c[1]).includes(cat)?cat:"Rückruf",assignee:person!=="alle"?person:me.id,due:iso(new Date()),priority:"normal",status:"offen"};
+ const d=t||{category:CATS.flatMap(c=>c[1]).includes(cat)?cat:"Rückruf",assignee:person!=="alle"?person:me.id,due:iso(new Date()),priority:"normal",status:"offen",...(pre||{})};
  $("f_title").value=d.title||"";$("f_cat").value=d.category||"Sonstiges";$("f_who").value=d.assignee||"";$("f_due").value=d.due||"";
  $("f_cust").value=d.customer||"";$("f_phone").value=d.phone||"";$("f_maker").value=d.manufacturer||"";$("f_model").value=d.model||"";$("f_notes").value=d.notes||"";
  segSet("f_prio",d.priority||"normal");segSet("f_status",d.status||"offen");
