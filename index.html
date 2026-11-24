@@ -160,6 +160,17 @@ dialog.ask{width:min(440px,92vw)}dialog.ask .sheet{gap:10px;grid-template-column
 label{display:grid;gap:4px;font-size:14px;font-weight:600;color:var(--muted)}
 input,select,textarea{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;font-size:16px;min-height:46px;font-weight:400;color:var(--ink);width:100%}
 textarea{min-height:84px;resize:vertical}
+[hidden]{display:none!important}
+/* AkuWin-Kundensuche (Aufgabe, Laborauftrag) */
+.akpick{position:relative}.akdrop{position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 30px rgba(27,73,59,.16);margin-top:4px;max-height:280px;overflow:auto;padding:4px}
+.akdrop button{display:flex;flex-direction:column;align-items:flex-start;width:100%;border:0;background:none;text-align:left;padding:8px 12px;border-radius:10px;cursor:pointer;font:inherit}
+.akdrop button:hover,.akdrop button:focus{background:#EEF5F2;outline:none}.akdrop b{font-size:15px;color:var(--ink)}.akdrop small{font-size:12.5px;color:var(--muted)}.akdrop p{margin:8px 12px;font-size:14px;color:var(--muted)}
+.akid{display:inline-flex;align-items:center;gap:8px;margin-top:6px;background:#E3F0EA;color:var(--deep);border-radius:99px;padding:3px 6px 3px 12px;font-size:13px;font-weight:600;width:max-content}
+.akid button{border:0;background:none;color:var(--muted);font-size:17px;cursor:pointer;line-height:1;padding:0 4px}
+.ocheckline{display:flex;align-items:center;gap:10px;color:var(--ink);font-size:15px}.ocheckline input{width:20px;height:20px;min-height:0;padding:0;accent-color:var(--hot)}
+.lkid{font-size:12px;color:var(--deep);font-weight:600;margin-top:-4px}.lkid .kdnr{font-size:12px}
+.kdnr.big{font-size:14px;vertical-align:middle;padding:2px 8px}
+.kdnr{font-variant-numeric:tabular-nums;background:#EEF3F1;border-radius:6px;padding:0 6px;color:var(--deep);font-weight:600}
 /* Otoplastik-Spezifikation (Labor + Beratung) */
 .ospec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 14px;align-items:start}
 .ospec .wide,.ospec .ochecks,.ospec .oextras{grid-column:1/-1}
@@ -680,21 +691,15 @@ dialog.wide{width:min(860px,96vw)}
 
 <dialog id="dlg"><form class="sheet" id="form" method="dialog">
  <h3 id="formTitle">Neue Aufgabe</h3>
- <label class="full">Aufgabe<input id="f_title" required placeholder="z. B. Kunde wegen Anpassung zurückrufen"></label>
- <label>Kategorie<select id="f_cat"></select></label>
+ <div class="full akpick" id="f_custWrap"><label>Kunde<input id="f_cust" autocomplete="off" placeholder="Name eingeben – Vorschläge aus AkuWin"></label><div class="akdrop" id="f_custDrop" hidden></div><div class="akid" id="f_akid" hidden></div></div>
+ <label>Telefon<input id="f_phone" type="tel" autocomplete="off"></label>
  <label>Zuständig<select id="f_who"></select></label>
- <label>Fällig am<input id="f_due" type="date"></label>
+ <label class="full">Aufgabe<textarea id="f_title" required rows="3" placeholder="Was ist zu tun? z. B. Kunde zurückrufen wegen Anpasstermin"></textarea></label>
+ <label>Taucht auf am<input id="f_due" type="date"></label>
  <div style="display:grid;gap:4px"><span class="lbl">Schnell setzen</span>
   <div class="seg" id="dueQuick"><button type="button" data-d="0">Heute</button><button type="button" data-d="1">Morgen</button><button type="button" data-d="7">+1 Woche</button></div></div>
- <div class="full" style="display:grid;gap:4px"><span class="lbl">Priorität</span>
-  <div class="seg" id="f_prio"><button type="button" data-v="hoch" class="hotsel">Dringend</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="niedrig">Später</button></div></div>
- <div class="full" style="display:grid;gap:4px"><span class="lbl">Status</span>
-  <div class="seg" id="f_status"><button type="button" data-v="offen">Offen</button><button type="button" data-v="arbeit">In Arbeit</button><button type="button" data-v="wartet">Wartet</button><button type="button" data-v="erledigt">Erledigt</button></div></div>
- <label>Kundenname<input id="f_cust" autocomplete="off"></label>
- <label>Telefon<input id="f_phone" type="tel" autocomplete="off"></label>
- <label>Hersteller<input id="f_maker" list="makers" autocomplete="off"></label>
- <label>Gerätemodell<input id="f_model" autocomplete="off"></label>
- <label class="full">Notizen<textarea id="f_notes"></textarea></label>
+ <label class="ocheckline full"><input type="checkbox" id="f_urgent"> Dringend</label>
+ <label class="full" id="f_notesWrap" hidden>Bisherige Notiz<textarea id="f_notes" rows="2"></textarea></label>
  <div class="actions"><button type="button" class="btn danger" id="delBtn">Löschen</button><button type="button" class="btn" id="cancelBtn">Abbrechen</button><button type="submit" class="btn primary">Speichern</button></div>
 </form></dialog>
 <datalist id="makers"><option>Phonak</option><option>Oticon</option><option>Signia</option><option>Widex</option><option>ReSound</option><option>Starkey</option><option>Unitron</option><option>Bernafon</option><option>Sonic</option><option>Rexton</option><option>Hansaton</option><option>Audio Service</option><option>Otoplastik-Labor</option></datalist>

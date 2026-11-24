@@ -83,7 +83,7 @@ async function load(){
 async function save(row,msg){
  const i=st.orders.findIndex(o=>o.id===row.id);i<0?st.orders.unshift(row):st.orders[i]={...st.orders[i],...row};H().rerender();
  let{error}=await H().sb.from("lab_orders").upsert({...row,updated_at:new Date().toISOString()});
- if(error&&/assignee/.test(error.message||"")){const r={...row,updated_at:new Date().toISOString()};delete r.assignee;({error}=await H().sb.from("lab_orders").upsert(r))}
+ if(error&&/assignee|akuwin_id/.test(error.message||"")){const r={...row,updated_at:new Date().toISOString()};delete r.assignee;delete r.akuwin_id;({error}=await H().sb.from("lab_orders").upsert(r))}
  if(error){H().toast("Nicht gespeichert: "+error.message);load();return false}
  syncTask(st.orders.find(o=>o.id===row.id)||row);
  if(msg)H().toast(msg);return true;
@@ -101,10 +101,10 @@ async function syncTask(o){
  const all=H().tasks||[],ex=all.find(t=>t.labOrderId===o.id);
  const finished=!!o.delivered_at||o.stage>=1;
  if(!ex){if(finished||!o.assignee)return;
-  const t={id:H().uid(),title:taskTitle(o),category:"Otoplastik",assignee:o.assignee,due:iso(new Date()),
+  const t={id:H().uid(),title:taskTitle(o),category:"Otoplastik",akuwinId:o.akuwin_id||null,assignee:o.assignee,due:iso(new Date()),
    priority:o.urgent?"hoch":"normal",status:"offen",customer:o.customer,phone:o.phone||"",notes:["Bitte im Labor bearbeiten: "+[sidesTxt(o),summary(o)].filter(Boolean).join(", "),o.due?"Anpassung "+dueLabel(o.due):"",o.notes].filter(Boolean).join(" · "),labOrderId:o.id,consultationId:o.consultation_id||null,createdAt:Date.now()};
   await H().saveTask(t,null);return}
- const nt={...ex,title:taskTitle(o),customer:o.customer,phone:o.phone||ex.phone,priority:o.urgent?"hoch":ex.priority==="hoch"?"normal":ex.priority};
+ const nt={...ex,title:taskTitle(o),customer:o.customer,akuwinId:o.akuwin_id||ex.akuwinId||null,phone:o.phone||ex.phone,priority:o.urgent?"hoch":ex.priority==="hoch"?"normal":ex.priority};
  if(o.assignee!==undefined)nt.assignee=o.assignee||"";
  if(finished&&ex.status!=="erledigt"){nt.status="erledigt";nt.prevStatus=ex.status;nt.doneAt=Date.now()}
  if(!finished&&ex.status==="erledigt"){nt.status=ex.prevStatus||"offen";nt.prevStatus=null;nt.doneAt=null}
@@ -145,6 +145,7 @@ function kcard(o,c){
  const step=o.stage===1?"Gereinigt – Beschneiden offen":"";
  return `<article class="lk${late?" late":""}${o.urgent?" urgent":""}${st.arrived===o.id?" arrive":""}" data-l-open="${esc(o.id)}" draggable="true" data-l-drag="${esc(o.id)}">
   <div class="lkt"><b>${esc(o.customer)}</b><span class="lkr">${o.urgent?'<span class="tag hot">Eilig</span>':""}${o.assignee?`<span class="who" title="${esc(whoName(o.assignee))}">${esc(whoIni(o.assignee))}</span>`:""}</span></div>
+  ${o.akuwin_id?`<div class="lkid"><span class="kdnr">Kd. ${esc(o.akuwin_id)}</span></div>`:""}
   <div class="lkm">${sideChips(o)}<span class="lks">${esc(summary(o)||"Spezifikation offen")}</span></div>
   ${step?`<div class="lkstep">${step}</div>`:""}
   <div class="lkf"><span class="ldue ${late?"late":soon?"soon":""}">${o.due?esc(dueLabel(o.due)):"kein Termin"}</span>
@@ -179,7 +180,7 @@ function formHtml(){
  const f=st.form,s=f.spec,both=f.sides==="beide";
  const earTabs=both&&s.same===false;
  return `<h3>${f.id?"Laborauftrag bearbeiten":"Neuer Laborauftrag"}</h3>
- <div class="lgrid"><label>Kunde<input data-lf-in="customer" value="${esc(f.customer)}" required placeholder="Vor- und Nachname"></label><label>Telefon<input data-lf-in="phone" value="${esc(f.phone||"")}" type="tel"></label>
+ <div class="lgrid"><div class="akpick"><label>Kunde<input data-lf-in="customer" value="${esc(f.customer)}" required autocomplete="off" placeholder="Name eingeben – Vorschläge aus AkuWin"></label><div class="akdrop" id="lfCustDrop" hidden></div><div class="akid" id="lfAkid" ${f.akuwin_id?"":"hidden"}>${f.akuwin_id?`AkuWin Kd. ${esc(f.akuwin_id)} <button type="button" data-lf-akclear aria-label="Verknüpfung lösen">×</button>`:""}</div></div><label>Telefon<input data-lf-in="phone" value="${esc(f.phone||"")}" type="tel"></label>
   <div class="lq inline full"><span class="lql">Wer macht den ersten Schritt?</span>${whoChips(f.assignee,"data-lf-who")}</div><div class="lq inline"><span class="lql">Priorität</span><div class="chips"><button type="button" class="chip" data-lf-urgent aria-pressed="${!!f.urgent}">Eilig</button></div></div></div>
  <div class="lsec"><h4>Abformung</h4><div class="ospec">
   <label>Abgeformt am<input data-lf-in="spec.abformung.datum" type="date" value="${esc(s.abformung?.datum||"")}"></label>
@@ -197,12 +198,16 @@ function openForm(o){
  if(o&&o.sides==="links"&&o.spec&&o.spec.same!==false&&!o.spec.R)st.form.spec.R=o.spec.L||blankEar();
  paintForm();document.getElementById("labDlg").showModal();
 }
-function paintForm(){const d=document.getElementById("labForm"),y=d.scrollTop;d.innerHTML=formHtml();d.scrollTop=y}
+function paintForm(){const d=document.getElementById("labForm"),y=d.scrollTop;d.innerHTML=formHtml();d.scrollTop=y;
+ // AkuWin-Kundensuche am Kundenfeld
+ const i=d.querySelector('[data-lf-in="customer"]');if(i&&H().akAttach){if(st.form.akuwin_id)i.dataset.akLock=st.form.customer;
+  H().akAttach(i,d.querySelector("#lfCustDrop"),c=>{st.form.customer=[c.first,c.last].filter(Boolean).join(" ");st.form.akuwin_id=c.id;if(c.phone&&!st.form.phone)st.form.phone=c.phone;paintForm()})}}
 function ensure(){
  if(document.getElementById("labDlg"))return;
  document.body.insertAdjacentHTML("beforeend",`<dialog id="labDlg" class="wide"><div class="sheet lform" id="labForm"></div></dialog><dialog id="labDetail" class="wide"><div class="sheet" id="labDetailBody"></div></dialog>`);
  const f=document.getElementById("labForm");
  f.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.lfAkclear!=null){st.form.akuwin_id=null;paintForm();return}
   if(d.lfSet){setP(d.lfSet,getP(d.lfSet)===d.v&&d.lfSet!=="sides"?"":d.v);paintForm();return}
   if(d.lfTog){const a=getP(d.lfTog)||[];setP(d.lfTog,a.includes(d.v)?a.filter(x=>x!==d.v):[...a,d.v]);paintForm();return}
   if(d.lfSame){st.form.spec.same=d.lfSame==="1";if(!st.form.spec.same)st.form.spec.L=JSON.parse(JSON.stringify(st.form.spec.R));paintForm();return}
@@ -214,11 +219,11 @@ function ensure(){
    const{error}=await H().sb.from("lab_orders").delete().eq("id",id);if(error)H().toast("Löschen fehlgeschlagen");else{st.orders=st.orders.filter(o=>o.id!==id);H().rerender();H().toast("Auftrag gelöscht")}return}
   if(d.lfSave!=null){const fo=st.form;if(!fo.customer.trim()){f.querySelector('[data-lf-in="customer"]').focus();return}
    if(fo.sides!=="beide")fo.spec.same=true;if(fo.sides==="links"&&fo.spec.same)fo.spec.L=fo.spec.R;
-   const isNew=!fo.id,row={id:fo.id||H().uid(),assignee:fo.assignee||null,customer:fo.customer.trim(),phone:fo.phone||null,sides:fo.sides,due:fo.due||null,urgent:!!fo.urgent,notes:fo.notes||null,spec:fo.spec,
+   const isNew=!fo.id,row={id:fo.id||H().uid(),assignee:fo.assignee||null,akuwin_id:fo.akuwin_id||null,customer:fo.customer.trim(),phone:fo.phone||null,sides:fo.sides,due:fo.due||null,urgent:!!fo.urgent,notes:fo.notes||null,spec:fo.spec,
     ...(isNew?{stage:0,history:[{step:0,dir:0,at:new Date().toISOString(),by:meName()}]}:{})};
    document.getElementById("labDlg").close();await save(row,isNew?"Auftrag ist im Labor":"Auftrag gespeichert");return}
  });
- f.addEventListener("input",e=>{const t=e.target;if(t.dataset.lfIn){setP(t.dataset.lfIn,t.value);if(t.tagName==="SELECT"&&/anbindung|material$/.test(t.dataset.lfIn))paintForm()}if(t.dataset.lfChk)setP(t.dataset.lfChk,t.checked)});
+ f.addEventListener("input",e=>{const t=e.target;if(t.dataset.lfIn==="customer"&&st.form.akuwin_id&&t.value.trim()!==t.dataset.akLock){st.form.akuwin_id=null;const a=document.getElementById("lfAkid");if(a){a.hidden=true;a.innerHTML=""}}if(t.dataset.lfIn){setP(t.dataset.lfIn,t.value);if(t.tagName==="SELECT"&&/anbindung|material$/.test(t.dataset.lfIn))paintForm()}if(t.dataset.lfChk)setP(t.dataset.lfChk,t.checked)});
  document.getElementById("labDetail").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset,o=st.orders.find(x=>x.id===st.detail);if(!o)return;
   if(d.ldClose!=null){document.getElementById("labDetail").close();return}
   if(d.ldEdit!=null){document.getElementById("labDetail").close();openForm(o);return}
@@ -236,7 +241,7 @@ function openDetail(id){
  ensure();const o=st.orders.find(x=>x.id===id);if(!o)return;st.detail=id;const s=o.spec||{},a=s.abformung||{};
  const ears=o.sides==="beide"&&s.same===false?`<div class="ears2"><div><h5 class="ear R">Rechts</h5>${specTable(s.R||{})}</div><div><h5 class="ear L">Links</h5>${specTable(s.L||{})}</div></div>`:specTable(earSpec(o,o.sides==="links"?"L":"R"));
  const hist=(o.history||[]).slice().reverse().map(h=>`<li><b>${h.dir===0?"Auftrag angelegt":h.dir<0?"Zurückgenommen: "+(STEPS[h.step-1]?.t||""):STEPS[h.step-1]?.l||""}</b><small>${esc(when(h.at))}${h.by?" · "+esc(h.by):""}</small></li>`).join("");
- document.getElementById("labDetailBody").innerHTML=`<div class="ldtop"><div><h3>${esc(o.customer)}</h3><div class="meta">${sideChips(o)}${o.urgent?'<span class="tag hot">Eilig</span>':""}${o.phone?`<a href="tel:${esc(o.phone.replace(/[^\d+]/g,""))}">${esc(o.phone)}</a>`:""}<span>${o.due?esc(dueLabel(o.due)):"kein Anpasstermin"}</span></div></div><button class="btn" data-ld-close>Schließen</button></div>
+ document.getElementById("labDetailBody").innerHTML=`<div class="ldtop"><div><h3>${esc(o.customer)}${o.akuwin_id?` <span class="kdnr big">Kd. ${esc(o.akuwin_id)}</span>`:""}</h3><div class="meta">${sideChips(o)}${o.urgent?'<span class="tag hot">Eilig</span>':""}${o.phone?`<a href="tel:${esc(o.phone.replace(/[^\d+]/g,""))}">${esc(o.phone)}</a>`:""}<span>${o.due?esc(dueLabel(o.due)):"kein Anpasstermin"}</span></div></div><button class="btn" data-ld-close>Schließen</button></div>
   ${track(o)}
   <div class="ldgrid"><div><h4>Otoplastik</h4>${ears}${o.notes?`<p class="lnote">${esc(o.notes)}</p>`:""}<h4>Abformung</h4><dl class="lspec"><dt>Abgeformt am</dt><dd>${esc(a.datum?fmt(a.datum):"–")}</dd><dt>Anpasstermin</dt><dd>${esc(o.due?fmt(o.due):"–")}</dd>${a.masse?`<dt>Material</dt><dd>${esc(a.masse)}</dd>`:""}<dt>Qualität</dt><dd>${esc(a.qualitaet||"–")}</dd>${a.besonderheiten?`<dt>Besonderheiten</dt><dd>${esc(a.besonderheiten)}</dd>`:""}</dl></div>
    <div><h4>Verlauf</h4><ol class="lhist">${hist}</ol></div></div>

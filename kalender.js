@@ -125,7 +125,7 @@ function openDetail(id){
  if(!dlg){document.body.insertAdjacentHTML("beforeend",`<dialog id="kDlg"><div class="sheet kdet" id="kDlgBody"></div></dialog>`);dlg=document.getElementById("kDlg");
   dlg.addEventListener("click",e=>{if(e.target===dlg){dlg.close();return}const b=e.target.closest("button");if(!b)return;const d=b.dataset;const ap=st.detail;
    if(d.kclose!=null){dlg.close();return}
-   if(d.ktask!=null&&ap){dlg.close();H().newTask&&H().newTask({title:"Rückruf: "+(ap.type||"Termin"),category:"Rückruf",customer:ap.client||"",notes:`Termin ${new Date(ap.start).toLocaleDateString("de-DE")} ${hm(ap.start)} Uhr · ${ap.type}${ap.note?" · "+ap.note:""}`});return}
+   if(d.ktask!=null&&ap){dlg.close();H().newTask&&H().newTask({title:`Zum Termin ${new Date(ap.start).toLocaleDateString("de-DE")} ${hm(ap.start)} Uhr (${ap.type}${ap.note?", "+ap.note:""}): `,customer:(ap.client||"").split(",").map(s=>s.trim()).reverse().join(" "),akuwinId:ap.clientId||null});return}
    if(d.kberatung!=null&&ap){dlg.close();window.HD_BERATUNG&&window.HD_BERATUNG.startWith&&window.HD_BERATUNG.startWith(ap.client||"");return}
   })}
  st.detail=a;const day=new Date(a.start);

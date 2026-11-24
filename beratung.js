@@ -485,7 +485,7 @@ async function createTask(kind,title,cat,opt={}){
  const assignee=opt.assignee!==undefined?opt.assignee||"":H().me?.id||"";
  // über die zentrale Speicherfunktion der Aufgaben-App: erscheint sofort in der Liste und wird live verteilt
  const t={id:uid(),title,category:cat,assignee,due:isoD(due),priority:opt.priority||"normal",status:"offen",customer:name(),phone:S.kunde.tel||"",
-  manufacturer:kind==="reserve"&&dev?dev.m:"",model:kind==="reserve"&&dev?dev.model:"",notes:[opt.notes,`Aus der Beratung vom ${new Date().toLocaleDateString("de-DE")}`].filter(Boolean).join(" · "),consultationId:cid,createdAt:Date.now()};
+  manufacturer:kind==="reserve"&&dev?dev.m:"",model:kind==="reserve"&&dev?dev.model:"",notes:[opt.notes,`Aus der Beratung vom ${new Date().toLocaleDateString("de-DE")}`].filter(Boolean).join(" · "),consultationId:cid,akuwinId:S.kunde.akuwinId||null,createdAt:Date.now()};
  const ok=await H().saveTask(t,null);
  if(!ok){toast("Aufgabe nicht angelegt");return false}
  S.tasks.push({id:kind,title,cat,taskId:t.id,who:opt.assignee!==undefined?(H().team().find(m=>m.id===assignee)||{}).name||"":"",due:due.toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"})});toast("Aufgabe angelegt");changed();H().rerender();
@@ -495,9 +495,9 @@ async function sendLab(){
  const o=S.oto;if(!name()||name()==="Neuer Kunde"){toast("Bitte zuerst den Kundennamen eintragen");step=0;H().rerender();return}
  const same=o.sides!=="beide"||o.same,spec={same,R:o.sides==="links"&&same?o.L&&o.L.form?o.L:o.R:o.R,L:same?o.R:o.L,abformung:o.abformung};
  const me=H().team().find(t=>t.id===H().me?.id)?.name||"";
- const lab={id:uid(),assignee:(o.assignee===undefined?H().me?.id:o.assignee)||null,customer:name(),phone:S.kunde.tel||null,consultation_id:cid,sides:o.sides||"beide",spec,stage:0,history:[{step:0,dir:0,at:new Date().toISOString(),by:me}],due:o.due||null,urgent:false,notes:o.notes||null};
+ const lab={id:uid(),akuwin_id:S.kunde.akuwinId||null,assignee:(o.assignee===undefined?H().me?.id:o.assignee)||null,customer:name(),phone:S.kunde.tel||null,consultation_id:cid,sides:o.sides||"beide",spec,stage:0,history:[{step:0,dir:0,at:new Date().toISOString(),by:me}],due:o.due||null,urgent:false,notes:o.notes||null};
  let{error}=await H().sb.from("lab_orders").insert(lab);
- if(error&&/assignee/.test(error.message||"")){const l={...lab};delete l.assignee;({error}=await H().sb.from("lab_orders").insert(l))}
+ if(error&&/assignee|akuwin_id/.test(error.message||"")){const l={...lab};delete l.assignee;delete l.akuwin_id;({error}=await H().sb.from("lab_orders").insert(l))}
  if(error){toast("Laborauftrag nicht gesendet: "+error.message);return}
  window.HD_LABOR&&window.HD_LABOR.syncTask(lab);
  o.sent=true;o.labId=lab.id;toast(lab.assignee?"Auftrag ist im Labor – Aufgabe angelegt":"Auftrag ist im Labor");changed();H().rerender();window.HD_LABOR&&window.HD_LABOR.load();

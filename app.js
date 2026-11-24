@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.12.0 · Otoplastik-Formular neu";
+const VERSION="1.13.0 · AkuWin-Kunde in Aufgabe & Labor";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -35,23 +35,23 @@ const show=v=>["setupView","loginView","pwView","nameView","appView"].forEach(x=
 
 let sb=null,me=null,tasks=[],team=[],page=ls.get("page","start"),tab="tag",person=ls.get("person","alle"),cat=ls.get("cat",""),q="",editing=null,loaded=false,live=false,channel=null,timer=null;
 $("ver").textContent=VERSION;
-window.HD={get tasks(){return tasks},cats:CATS,iso:d=>iso(d),uid:()=>uid(),newTask:p=>openForm(null,p),saveTask:(t,b)=>save(t,b),esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),ask:(title,text,ok="Löschen",info=false)=>new Promise(res=>{const d=$("askDlg");$("askTitle").textContent=title;$("askText").textContent=text||"";$("askYes").textContent=ok;$("askNo").style.display=info?"none":"";$("askYes").className="btn "+(info||!/lösch|entfern/i.test(ok)?"primary":"danger");d.returnValue="";d.onclose=()=>res(d.returnValue==="yes");d.showModal();setTimeout(()=>$("askNo").focus(),30)}),
+window.HD={get tasks(){return tasks},akAttach:(i,d,f)=>akAttach(i,d,f),cats:CATS,iso:d=>iso(d),uid:()=>uid(),newTask:p=>openForm(null,p),saveTask:(t,b)=>save(t,b),esc:s=>esc(s),svg:(n,x)=>svg(n,x),toast:(m,u)=>toast(m,u),rerender:()=>render(),page:()=>page,get sb(){return sb},get me(){return me},team:()=>team,go:t=>go(t),ask:(title,text,ok="Löschen",info=false)=>new Promise(res=>{const d=$("askDlg");$("askTitle").textContent=title;$("askText").textContent=text||"";$("askYes").textContent=ok;$("askNo").style.display=info?"none":"";$("askYes").className="btn "+(info||!/lösch|entfern/i.test(ok)?"primary":"danger");d.returnValue="";d.onclose=()=>res(d.returnValue==="yes");d.showModal();setTimeout(()=>$("askNo").focus(),30)}),
  setTab:t=>{if(t==="labor"){go("labor");return}tab=t;render()},laborActive:()=>page==="labor"};
 
 /* ---------- Datenbank <-> App ---------- */
 const fromRow=r=>({id:r.id,title:r.title,category:r.category,assignee:r.assignee||"",due:r.due||"",priority:r.priority,status:r.status,prevStatus:r.prev_status||null,
  customer:r.customer||"",phone:r.phone||"",manufacturer:r.manufacturer||"",model:r.model||"",notes:r.notes||"",
- createdAt:r.created_at?Date.parse(r.created_at):0,doneAt:r.done_at?Date.parse(r.done_at):null,labOrderId:r.lab_order_id||null,consultationId:r.consultation_id||null});
+ createdAt:r.created_at?Date.parse(r.created_at):0,doneAt:r.done_at?Date.parse(r.done_at):null,labOrderId:r.lab_order_id||null,consultationId:r.consultation_id||null,akuwinId:r.akuwin_id||null});
 const toRow=t=>({id:t.id,title:t.title,category:t.category||"Sonstiges",assignee:t.assignee||null,due:t.due||null,priority:t.priority||"normal",status:t.status||"offen",
  prev_status:t.prevStatus||null,customer:t.customer||null,phone:t.phone||null,manufacturer:t.manufacturer||null,model:t.model||null,notes:t.notes||null,
- created_at:new Date(t.createdAt||Date.now()).toISOString(),updated_at:new Date().toISOString(),done_at:t.doneAt?new Date(t.doneAt).toISOString():null,...(t.labOrderId?{lab_order_id:t.labOrderId}:{}),...(t.consultationId?{consultation_id:t.consultationId}:{})});
+ created_at:new Date(t.createdAt||Date.now()).toISOString(),updated_at:new Date().toISOString(),done_at:t.doneAt?new Date(t.doneAt).toISOString():null,...(t.labOrderId?{lab_order_id:t.labOrderId}:{}),...(t.consultationId?{consultation_id:t.consultationId}:{}),...(t.akuwinId?{akuwin_id:t.akuwinId}:{})});
 const putLocal=t=>{const i=tasks.findIndex(x=>x.id===t.id);i<0?tasks.push(t):tasks[i]=t};
 const cache=()=>ls.set("cache",{tasks,team,at:Date.now()});
 
 async function save(t,before){
  putLocal(t);render();
  let{error}=await sb.from("tasks").upsert(toRow(t));
- if(error&&/lab_order_id|consultation_id/.test(error.message||"")){const r=toRow(t);delete r.lab_order_id;delete r.consultation_id;({error}=await sb.from("tasks").upsert(r))}
+ if(error&&/lab_order_id|consultation_id|akuwin_id/.test(error.message||"")){const r=toRow(t);delete r.lab_order_id;delete r.consultation_id;delete r.akuwin_id;({error}=await sb.from("tasks").upsert(r))}
  if(error){before?putLocal(before):(tasks=tasks.filter(x=>x.id!==t.id));render();toast("Nicht gespeichert – keine Verbindung?");return false}
  cache();return true;
 }
@@ -144,7 +144,7 @@ function card(t){
  return `<article class="task${t.priority==="hoch"||late?" urgent":""}${t.status==="erledigt"?" done":""}${t.id===arrived?" arrive":""}" data-id="${esc(t.id)}">
   <span class="tile ${tile}">${svg(ic)}</span>
   <div class="body"><span class="title">${esc(t.title)}</span>
-   <div class="meta"><span>${esc(t.category||"Sonstiges")}</span>${t.priority==="hoch"&&t.status!=="erledigt"?'<span class="tag hot">Dringend</span>':""}${st}${labTag}${t.customer?`<span>${esc(t.customer)}</span>`:""}${tel}${device?`<span>${esc(device)}</span>`:""}</div>
+   <div class="meta">${t.category&&t.category!=="Sonstiges"?`<span>${esc(t.category)}</span>`:""}${t.priority==="hoch"&&t.status!=="erledigt"?'<span class="tag hot">Dringend</span>':""}${st}${labTag}${t.customer?`<span><b>${esc(t.customer)}</b>${t.akuwinId?` <span class="kdnr">Kd. ${esc(t.akuwinId)}</span>`:""}</span>`:""}${tel}${device?`<span>${esc(device)}</span>`:""}</div>
    ${t.notes?`<div class="meta">${esc(t.notes.length>120?t.notes.slice(0,120)+"…":t.notes)}</div>`:""}
    <div class="meta mside">${dl?`<span class="${late?"late":""}" style="${late?"color:var(--hot);font-weight:700":""}">${esc(dl)}</span>`:""}${t.assignee?`<span>${esc(firstName(t.assignee))}</span>`:""}</div></div>
   <div class="side">${dl?`<span class="${late?"late":""}">${esc(dl)}</span>`:""}${av}</div>
@@ -211,33 +211,62 @@ const segGet=id=>$(id).querySelector('[aria-pressed="true"]')?.dataset.v;
 function openForm(t,pre){
  editing=t||null;
  $("formTitle").textContent=t?"Aufgabe bearbeiten":"Neue Aufgabe";
- $("f_cat").innerHTML=CATS.map(([g,cs])=>`<optgroup label="${esc(g)}">${cs.map(c=>`<option>${esc(c)}</option>`).join("")}</optgroup>`).join("");
  $("f_who").innerHTML=`<option value="">– niemand –</option>`+team.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("");
- const d=t||{category:CATS.flatMap(c=>c[1]).includes(cat)?cat:"Rückruf",assignee:person!=="alle"?person:me.id,due:iso(new Date()),priority:"normal",status:"offen",...(pre||{})};
- $("f_title").value=d.title||"";$("f_cat").value=d.category||"Sonstiges";$("f_who").value=d.assignee||"";$("f_due").value=d.due||"";
- $("f_cust").value=d.customer||"";$("f_phone").value=d.phone||"";$("f_maker").value=d.manufacturer||"";$("f_model").value=d.model||"";$("f_notes").value=d.notes||"";
- segSet("f_prio",d.priority||"normal");segSet("f_status",d.status||"offen");
+ const d=t||{assignee:person!=="alle"?person:me.id,due:iso(new Date()),priority:"normal",status:"offen",...(pre||{})};
+ $("f_title").value=d.title||"";$("f_who").value=d.assignee||"";$("f_due").value=d.due||"";
+ $("f_cust").value=d.customer||"";$("f_phone").value=d.phone||"";$("f_urgent").checked=d.priority==="hoch";
+ // alte Aufgaben: Notiz/Gerät bleiben sichtbar und bearbeitbar
+ const old=[d.notes,[d.manufacturer,d.model].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+ $("f_notes").value=old;$("f_notesWrap").hidden=!old;
+ akSet(d.akuwinId||null);
  $("delBtn").style.display=t?"":"none";$("delBtn").textContent="Löschen";delete $("delBtn").dataset.sure;
- $("dlg").showModal();if(!t)$("f_title").focus();
+ $("dlg").showModal();if(!t)(d.customer?$("f_title"):$("f_cust")).focus();
 }
 $("form").addEventListener("submit",async e=>{
  e.preventDefault();
  const title=$("f_title").value.trim();if(!title){$("f_title").focus();return}
- const status=segGet("f_status")||"offen",prev=editing||{},was=editing?{...editing}:null;
- const t={...prev,id:prev.id||uid(),title,category:$("f_cat").value,assignee:$("f_who").value,due:$("f_due").value,priority:segGet("f_prio")||"normal",status,
-  customer:$("f_cust").value.trim(),phone:$("f_phone").value.trim(),manufacturer:$("f_maker").value.trim(),model:$("f_model").value.trim(),notes:$("f_notes").value.trim(),
+ const prev=editing||{},was=editing?{...editing}:null,status=prev.status||"offen";
+ const prio=$("f_urgent").checked?"hoch":(prev.priority==="hoch"||!prev.priority?"normal":prev.priority);
+ const t={...prev,id:prev.id||uid(),title,category:prev.category||"Sonstiges",assignee:$("f_who").value,due:$("f_due").value,priority:prio,status,
+  customer:$("f_cust").value.trim(),phone:$("f_phone").value.trim(),akuwinId:akCur||null,
+  notes:$("f_notesWrap").hidden?(prev.notes||""):$("f_notes").value.trim(),manufacturer:$("f_notesWrap").hidden?prev.manufacturer:"",model:$("f_notesWrap").hidden?prev.model:"",
   createdAt:prev.createdAt||Date.now(),doneAt:status==="erledigt"?(prev.doneAt||Date.now()):null};
  $("dlg").close();
  if(await save(t,was))toast(was?"Gespeichert":"Aufgabe angelegt");
 });
 $("cancelBtn").onclick=()=>$("dlg").close();
 $("dueQuick").onclick=e=>{const b=e.target.closest("button");if(b)$("f_due").value=addDays(+b.dataset.d)};
-["f_prio","f_status"].forEach(id=>$(id).onclick=e=>{const b=e.target.closest("button");if(b)segSet(id,b.dataset.v)});
 $("delBtn").onclick=async()=>{const b=$("delBtn");if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Wirklich löschen?";return}
  const t={...editing};$("dlg").close();if(await removeTask(t))toast("Aufgabe gelöscht",()=>save(t))};
 
 let tt;function toast(msg,undo){$("toastMsg").textContent=msg;$("toastUndo").style.display=undo?"":"none";$("toastUndo").onclick=()=>{undo&&undo();$("toast").style.display="none"};
  $("toast").style.display="flex";clearTimeout(tt);tt=setTimeout(()=>$("toast").style.display="none",undo?6000:2200)}
+
+/* ---------- AkuWin-Kundensuche (gemeinsam für Aufgabe und Laborauftrag) ---------- */
+async function akClients(q){
+ const r=await sb.functions.invoke("akuwin",{body:{action:"clients",q}});
+ if(r.error){let m=String(r.error.message||r.error);try{m=(await r.error.context.json()).error||m}catch{}throw new Error(m)}
+ return r.data.clients||[];
+}
+const akName=c=>[c.first,c.last].filter(Boolean).join(" ");
+/* Hängt die Suche an ein Eingabefeld: Vorschläge ab 2 Zeichen, Klick übernimmt den Kunden */
+function akAttach(input,drop,onPick){
+ let tm=null,seq=0;
+ const hide=()=>{drop.hidden=true;drop.innerHTML=""};
+ input.addEventListener("input",()=>{const q=input.value.trim();clearTimeout(tm);if(input.dataset.akLock===q)return;if(q.length<2){hide();return}
+  tm=setTimeout(async()=>{const my=++seq;drop.hidden=false;drop.innerHTML="<p>Suche in AkuWin …</p>";
+   try{const list=await akClients(q);if(my!==seq)return;
+    drop.innerHTML=list.length?list.slice(0,12).map((c,i)=>`<button type="button" data-i="${i}"><b>${esc(c.last)}, ${esc(c.first)}</b><small>Kd. ${esc(c.id)}${c.birthday?" · geb. "+new Date(c.birthday+"T12:00").toLocaleDateString("de-DE"):""}${c.city?" · "+esc(c.city):""}</small></button>`).join(""):"<p>Kein Kunde in AkuWin gefunden – Name bleibt als Freitext.</p>";
+    drop.onclick=e=>{const b=e.target.closest("button[data-i]");if(!b)return;const c=list[Number(b.dataset.i)];input.dataset.akLock=akName(c);input.value=akName(c);hide();onPick(c)};
+   }catch(err){if(my===seq)drop.innerHTML=`<p>AkuWin nicht erreichbar: ${esc(err.message)}</p>`}},350)});
+ input.addEventListener("keydown",e=>{if(e.key==="Escape"&&!drop.hidden){e.preventDefault();e.stopPropagation();hide()}});
+ input.addEventListener("blur",()=>setTimeout(hide,200));
+}
+let akCur=null;
+function akSet(id){akCur=id||null;const el=$("f_akid");el.hidden=!akCur;el.innerHTML=akCur?`AkuWin Kd. ${esc(akCur)} <button type="button" aria-label="Verknüpfung lösen">×</button>`:"";$("f_cust").dataset.akLock=akCur?$("f_cust").value.trim():""}
+$("f_akid").addEventListener("click",e=>{if(e.target.closest("button"))akSet(null)});
+akAttach($("f_cust"),$("f_custDrop"),c=>{akSet(c.id);if(c.phone&&!$("f_phone").value.trim())$("f_phone").value=c.phone;$("f_title").focus()});
+$("f_cust").addEventListener("input",()=>{if(akCur&&$("f_cust").value.trim()!==$("f_cust").dataset.akLock)akSet(null)});
 
 /* ---------- Animation & Konfetti ---------- */
 let arrived=null,arrT;
