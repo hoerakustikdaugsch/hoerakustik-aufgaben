@@ -44,7 +44,7 @@ const empty=()=>({kunde:{anrede:"",vorname:"",nachname:"",geb:"",tel:"",mail:"",
  an:{seit:"",verlauf:"",seite:"",bemerkt:"",hoersturz:"",hsWann:"",hsSeite:"",laerm:"",laermArt:[],entz:[],ops:[],tinn:"",tinnSeite:"",tinnBel:0,tinnArt:"",
   schwindel:"",druck:"",hyper:"",schmerz:"",ausfluss:"",puls:"",schmalz:"",allergie:"",allergieText:"",familie:"",meds:"",allg:[],handling:[],hgAlt:"",hgModell:"",hgTrage:"",hgZufr:"",hgStoer:""},
  audio:{R:{},L:{}},sit:{},leben:[],technik:"",phone:"",frei:"",wuensche:[],bauform:"",energie:"",budget:"",ziele:[{t:"",p:1}],override:"",device:"",otos:-1,tasks:[],
- oto:{needed:"",sides:"",same:true,R:{anbindung:"",form:"",material:"",haerte:"",farbe:"",vent:"",kanal:"",extras:[],hoerer:""},L:{anbindung:"",form:"",material:"",haerte:"",farbe:"",vent:"",kanal:"",extras:[],hoerer:""},abformung:{datum:new Date().toISOString().slice(0,10),masse:"Silikon (A-vernetzend)",qualitaet:"Gut",besonderheiten:""},due:"",notes:"",sent:false},status:"offen"});
+ oto:{needed:"",sides:"",same:true,R:{anbindung:"",form:"",material:"",haerte:"",farbe:"",vent:"",kanal:"",extras:[],hoerer:""},L:{anbindung:"",form:"",material:"",haerte:"",farbe:"",vent:"",kanal:"",extras:[],hoerer:""},abformung:{datum:new Date().toISOString().slice(0,10),qualitaet:"",besonderheiten:""},due:"",notes:"",sent:false},status:"offen"});
 
 /* ---------- Zustand ---------- */
 let S=empty(),cid=null,mode="list",step=0,customer=false,custTab=0,list=[],listLoaded=false,listLoading=false,q="",saveT=null,saving=false,dirty=false,custWin=null;
@@ -410,24 +410,19 @@ function stepAbschluss(){
 // Otoplastik-Auswahllisten und Laborschritte kommen aus dem Labor-Modul (eine Quelle für beide)
 const OOPT=window.HD_LABOR.OPT;
 const LSTEPS=window.HD_LABOR.STEPS.map(x=>x.t);
-function earOto(side){const p="oto."+side,e=S.oto[side];
- return `<div class="q"><span class="ql">Anbindung</span>${chips(p+".anbindung",OOPT.anbindung)}</div><div class="q"><span class="ql">Form</span>${chips(p+".form",OOPT.form)}</div>
- <div class="q"><span class="ql">Material</span>${chips(p+".material",OOPT.material)}</div>${(e.material||"").startsWith("Weich")?`<div class="q"><span class="ql">Härte</span>${chips(p+".haerte",OOPT.haerte)}</div>`:""}
- <div class="q"><span class="ql">Farbe</span>${chips(p+".farbe",OOPT.farbe)}</div><div class="q"><span class="ql">Belüftung (Vent)</span>${chips(p+".vent",OOPT.vent)}</div>
- <div class="q"><span class="ql">Kanallänge</span>${chips(p+".kanal",OOPT.kanal)}</div><div class="q"><span class="ql">Extras</span>${chips(p+".extras",OOPT.extras,true)}</div>
- ${(e.anbindung||"").startsWith("RIC")?`<div class="form">${inp(p+".hoerer","Hörer (Typ / Länge)","text","z. B. Hersteller-Hörer M, Länge 2","full")}</div>`:""}`}
+function earOto(side){return window.HD_LABOR.specFields("oto."+side,get,{in:"data-in",chk:"data-chk",tog:"data-tog",ctx:"ber"})}
 function stepOto(){
  const o=S.oto,dev=DEVICES.find(d=>d.id===S.device);
  if(!o.sides){const c=ears();const r=pta("R"),l=pta("L");o.sides=c===2?"beide":r!=null&&r>25?"rechts":"links"}
- const anb=dev?(/^RIC/.test(dev.form)?"RIC / Ex-Hörer":/^(IdO|CIC)/.test(dev.form)?"IdO-Schale":"HdO mit Schlauch"):"";["R","L"].forEach(k=>{if(!o[k].anbindung&&anb)o[k].anbindung=anb});
+ const anb=dev?(/^RIC/.test(dev.form)?"RIC / Ex-Hörer":/^(IdO|CIC)/.test(dev.form)?"":"HdO mit Schlauch"):"";["R","L"].forEach(k=>{if(!o[k].anbindung&&anb)o[k].anbindung=anb});
  const both=o.sides==="beide",two=both&&!o.same;
  const head=card("Wird eine Otoplastik benötigt?",`<div class="q"><span class="ql">Otoplastik</span>${chips("oto.needed",["ja","nein","noch offen"])}</div>${dev?`<p class="muted">Gewähltes Gerät: ${esc(dev.m)} ${esc(dev.model)} (${esc(dev.form)})${dev.oto?" – laut Preistool ist hier in der Regel eine Otoplastik nötig.":""}</p>`:""}`);
  if(o.needed!=="ja")return head;
  if(o.sent)return head+`<div class="okbox"><b>Ans Labor gesendet</b><span>Der Auftrag steht jetzt im Labor-Reiter der Aufgaben-App und startet mit Schritt 1.</span>
   <ol class="mtrack">${LSTEPS.map((t,i)=>`<li class="${i===0?"now":""}"><i>${i+1}</i><small>${t}</small></li>`).join("")}</ol><button class="linkbtn" data-goto="labor">Im Labor ansehen</button></div>`;
- return head+card("Abformung",`<div class="form">${inp("oto.abformung.datum","Datum der Abformung","date")}${inp("oto.due","Geplanter Anpasstermin","date")}</div>
-  <div class="q"><span class="ql">Material</span>${chips("oto.abformung.masse",OOPT.masse)}</div><div class="q"><span class="ql">Qualität</span>${chips("oto.abformung.qualitaet",OOPT.qualitaet)}</div>
-  <div class="form">${inp("oto.abformung.besonderheiten","Besonderheiten","text","z. B. enger 2. Knick, Exostose rechts","full")}</div>`)+
+ return head+card("Abformung",`<div class="ospec">${inp("oto.abformung.datum","Abgeformt am","date")}${inp("oto.due","Nächster Anpasstermin","date")}
+   <label>Qualität<select data-in="oto.abformung.qualitaet"><option value="">– bitte wählen –</option>${OOPT.qualitaet.map(o=>`<option ${S.oto.abformung.qualitaet===o?"selected":""}>${o}</option>`).join("")}</select></label>
+   ${inp("oto.abformung.besonderheiten","Besonderheiten","text","z. B. enger 2. Knick, Exostose rechts","wide")}</div>`)+
  card("Spezifikation",`<div class="q"><span class="ql">Seite</span>${chips("oto.sides",["rechts","links","beide"])}</div>
   ${both?`<div class="q"><span class="ql">Ausführung</span><div class="chips"><button type="button" class="chip" data-otosame="1" aria-pressed="${o.same}">Beide Seiten gleich</button><button type="button" class="chip" data-otosame="0" aria-pressed="${!o.same}">Seiten unterschiedlich</button></div></div>`:""}
   ${two?`<div class="ears2"><div><h4 class="ear R">Rechts</h4>${earOto("R")}</div><div><h4 class="ear L">Links</h4>${earOto("L")}</div></div>`:earOto(o.sides==="links"?"L":"R")}
@@ -824,6 +819,8 @@ document.addEventListener("input",e=>{
  if(t.id==="bq"){q=t.value;H().rerender();const i=$("bq");i.focus();i.setSelectionRange(i.value.length,i.value.length);return}
  if(t.id==="akq"){akSearch(t.value);return}
  if(mode!=="edit")return;
+ if(t.dataset.chk){set(t.dataset.chk,t.checked);changed();return}
+ if(t.dataset.in&&t.tagName==="SELECT"&&/^oto\..*(anbindung|material)$/.test(t.dataset.in)){set(t.dataset.in,t.value);changed();rr();return}
  if(t.dataset.in){set(t.dataset.in,t.dataset.num!=null?Number(t.value):t.value);if(t.type==="range"){const lb=t.closest("label").querySelector("b");if(lb)lb.textContent=t.value}
   if(t.dataset.in.startsWith("kunde.")){const c=document.querySelector(".crumb b");if(c)c.textContent=name()}changed();return}
  if(t.dataset.aud){if(S.audioSrc&&S.audioSrc.from==="AkuWin"){rr();return}const[e2,f]=t.dataset.aud.split(".");const v=t.value.trim();S.audio[e2][f]=v===""?undefined:Number(v);$("audchart").innerHTML=audioPair();
@@ -840,7 +837,7 @@ if(KUNDE){
  if(bc)bc.onmessage=ev=>{const m=ev.data;if(m&&m.type==="state"){S=m.S;custTab=m.custTab;SNAP_PRICES=m.prices;S.override=m.stage===recommend().idx?"":m.stage;renderKunde()}};
 }
 
-window.HD_BERATUNG={render,startWith:name=>{H().go("beratung");newConsultation();const n=String(name||"").replace(/,.*$/,"").trim();if(n){AK.q=n;akSearch(n);H().rerender()}}};
+window.HD_BERATUNG={render,set:(p,v)=>{set(p,v);changed();rr()},startWith:name=>{H().go("beratung");newConsultation();const n=String(name||"").replace(/,.*$/,"").trim();if(n){AK.q=n;akSearch(n);H().rerender()}}};
 })();
 /* Abschluss: geplante Termine automatisch auffrischen (beim Zurückkehren in die App und alle 2 Minuten) */
 (function(){const fresh=()=>{if(mode==="edit"&&step===8&&S.kunde&&S.kunde.akuwinId&&!AK.upLoading&&document.visibilityState==="visible"&&active()){AK.busy=null;akUpcoming(true)}};

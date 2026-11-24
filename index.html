@@ -160,6 +160,18 @@ dialog.ask{width:min(440px,92vw)}dialog.ask .sheet{gap:10px;grid-template-column
 label{display:grid;gap:4px;font-size:14px;font-weight:600;color:var(--muted)}
 input,select,textarea{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;font-size:16px;min-height:46px;font-weight:400;color:var(--ink);width:100%}
 textarea{min-height:84px;resize:vertical}
+/* Otoplastik-Spezifikation (Labor + Beratung) */
+.ospec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 14px;align-items:start}
+.ospec .wide,.ospec .ochecks,.ospec .oextras{grid-column:1/-1}
+.ospec .ofield{display:flex;flex-direction:column;gap:2px}
+.ospec .otoadd{align-self:flex-start;font-size:13px;padding:2px 0;border:0;background:none;color:var(--forest);font-weight:600;cursor:pointer}
+.ospec .ochecks,.ospec .oextras{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.ospec .ochecks>span,.ospec .oextras>span{font-size:14px;font-weight:600;color:var(--muted);min-width:70px}
+.ospec .ocheck{display:inline-flex;grid-template-columns:none;align-items:center;gap:8px;font-size:15px;font-weight:600;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:99px;padding:6px 14px 6px 10px;cursor:pointer}
+.ospec .ocheck input{width:20px;height:20px;min-height:0;padding:0;margin:0;border-radius:4px;flex:none;accent-color:var(--forest)}
+.ospec .ocheck:has(input:checked){border-color:var(--forest);background:#E3F0EA}
+@media(max-width:760px){.ospec{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.ospec{grid-template-columns:1fr}}
 
 /* Kalender */
 .kbar{flex-wrap:wrap}.knav{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.knav .btn{min-width:40px}.ktitle{font-weight:700;color:var(--deep);margin-left:8px;font-size:17px}
