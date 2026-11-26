@@ -12,12 +12,12 @@ const isoD=d=>H().iso(d);
 const toast=m=>H()&&H().toast(m);
 /* ---------- Logik ---------- */
 const STAGES=[
- {id:"basis",name:"Basis",sub:"Gut hören im ruhigen Alltag",p:[3,1,1],auto:"einfach",ideal:"Zuhause, Gespräche zu zweit"},
- {id:"komfort",name:"Komfort",sub:"Einfach hören. Bequem aufladen.",p:[3,1,1],auto:"einfach",ideal:"wie Basis, ohne Batteriewechsel"},
- {id:"balance",name:"Balance",sub:"Mehr Sicherheit im Höralltag",p:[4,2,2],auto:"erkennt Situationen",ideal:"Familie, Einkaufen, aktiver Alltag"},
- {id:"praezision",name:"Präzision",sub:"Gesprächen leichter folgen",p:[4,3,3],auto:"passt sich laufend an",ideal:"regelmäßig Gruppen und Restaurant"},
- {id:"exzellenz",name:"Exzellenz",sub:"Souverän hören, auch wenn es lebhaft wird",p:[5,4,4],auto:"erkennt Sprecher und Bewegung",ideal:"Beruf, Vereine, wechselnde Situationen"},
- {id:"perfektion",name:"Perfektion",sub:"Höchste Technik für höchste Ansprüche",p:[5,5,5],auto:"volle Individualisierung",ideal:"höchste Ansprüche, Musik, schwierigste Situationen"}];
+ {id:"basis",name:"Basis",sub:"Gut hören im ruhigen Alltag",p:[3,1,1],auto:"einfach",ideal:"Zuhause, Gespräche zu zweit",plus:["Klare Sprache in ruhiger Umgebung","Schutz vor Pfeifen","Grundlegende Lärmdämpfung"]},
+ {id:"komfort",name:"Komfort",sub:"Einfach hören. Bequem aufladen.",p:[3,1,1],auto:"einfach",ideal:"wie Basis, ohne Batteriewechsel",plus:["Akku statt Batterien","App & Bluetooth je nach Modell"]},
+ {id:"balance",name:"Balance",sub:"Mehr Sicherheit im Höralltag",p:[4,2,2],auto:"erkennt Situationen",ideal:"Familie, Einkaufen, aktiver Alltag",plus:["Erkennt Situationen selbst","Hebt Ihr Gegenüber hervor","Dämpft Lärm und Wind stärker"]},
+ {id:"praezision",name:"Präzision",sub:"Gesprächen leichter folgen",p:[4,3,3],auto:"passt sich laufend an",ideal:"regelmäßig Gruppen und Restaurant",plus:["Passt sich fließend an","Feinere Klangabstimmung","Eigene Stimme klingt natürlich"]},
+ {id:"exzellenz",name:"Exzellenz",sub:"Souverän hören, auch wenn es lebhaft wird",p:[5,4,4],auto:"erkennt Sprecher und Bewegung",ideal:"Beruf, Vereine, wechselnde Situationen",plus:["Folgt mehreren Gesprächspartnern","Sensoren erkennen Bewegung","Eigene Musikprogramme"]},
+ {id:"perfektion",name:"Perfektion",sub:"Höchste Technik für höchste Ansprüche",p:[5,5,5],auto:"volle Individualisierung",ideal:"höchste Ansprüche, Musik, schwierigste Situationen",plus:["Stärkste Hilfe im Lärm","Feinster Klang bis in hohe Töne","Premium-Extras je nach Hersteller"]}];
 const DIMS=["Ruhe","Gruppe","Lärm"];
 const stageIdx=id=>STAGES.findIndex(s=>s.id===id);
 
@@ -352,6 +352,19 @@ function stepZiele(){
   ${S.ziele.length<5?`<button type="button" class="btn" data-addgoal>+ Ziel hinzufügen</button>`:""}
   ${hard.length?`<div class="sugg"><span class="ql">Vorschläge aus der Bedarfsanalyse</span><div class="chips">${hard.map(h=>`<button type="button" class="chip" data-sugg="${esc(h)}">+ ${esc(h)}</button>`).join("")}</div></div>`:""}`);
 }
+/* Leistungstreppe: jede Stufe zeigt, was neu dazukommt */
+function treppe(si,recIdx,pick){
+ const gkv=S.kunde.kasse==="gkv";
+ return `<div class="treppe${pick?" pick":""}">${STAGES.map((s,i)=>{const f=stageFrom(s.id),on=i===si,tag=pick?"button":"div";
+  const plus=i===0&&gkv?[...s.plus,"Zuzahlungsfrei"]:s.plus;
+  return `<${tag} ${pick?`type="button" data-stage="${i}" aria-pressed="${on}"`:""} class="tstep${on?" on":""}" style="--h:${370+i*34}px">
+   <span class="ttop"><span class="tnum">${i+1}</span>${i===recIdx?'<span class="ttag">Empfehlung</span>':""}</span>
+   <b>${s.name}</b><small>${esc(s.sub)}</small><i></i><em>${i===0?"Das ist dabei":"Neu"}</em>
+   <ul>${plus.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>
+   <span class="tprice">${s.id==="basis"?"Kassenleistung":"ab "+eur(gkv?f.gkv:f.vk)}<small>${s.id==="basis"?(gkv?"zuzahlungsfrei":"je Seite"):gkv?"Eigenanteil je Seite":"je Seite"}</small></span></${tag}>`}).join("")}</div>
+ <div class="tfoot"><span>Automatik: einfach</span><i></i><span>passt sich ganz von selbst an</span></div>
+ <p class="muted tnote">Jede Stufe kann alles der vorherigen – und mehr. Welche Funktionen genau enthalten sind, hängt von Hersteller, Modell und Bauform ab; sehr kleine Im-Ohr-Geräte haben z. B. kein Bluetooth-Streaming.</p>`;
+}
 function stepEmpfehlung(){
  const rec=recommend(),si=curStage(),st=STAGES[si],count=ears();
  const formWish=S.bauform==="im Ohr"||S.bauform==="möglichst unsichtbar";
@@ -361,9 +374,9 @@ function stepEmpfehlung(){
  return `<div class="recohead card"><div><span class="muted">Empfohlene Technikstufe</span><h2>${stageIdx(st.id)+1} · ${st.name}</h2><p>${esc(st.sub)} – ideal für ${esc(st.ideal)}.</p>
    ${S.override!==""?`<span class="tag work">von dir angepasst · Vorschlag war ${STAGES[rec.idx].name}</span>`:""}</div>
    <div class="profile">${DIMS.map((d,i)=>`<div><span>${d}</span><small>Bedarf</small>${dots(rec.n[i],"#B8452F")}<small>${st.name}</small>${dots(st.p[i])}</div>`).join("")}</div></div>
+ ${card("Unsere Technikstufen",`${treppe(si,rec.idx,true)}${S.override!==""?`<button type="button" class="linkbtn" data-stage="reset">Zurück zum Vorschlag (${STAGES[rec.idx].name})</button>`:""}`)}
  <div class="grid2"><div>
   ${card("Warum diese Stufe?",`<ul class="why">${rec.reasons.length?rec.reasons.map(r=>`<li>${r}</li>`).join(""):"<li>Keine besonderen Schwierigkeiten angegeben – Basis reicht aus.</li>"}</ul>${rec.notes.length?`<div class="notes">${rec.notes.map(n=>`<span>• ${esc(n)}</span>`).join("")}</div>`:""}`)}
-  ${card("Stufe anpassen",`<div class="stagepick">${STAGES.map((s,i)=>{const f=stageFrom(s.id);return `<button type="button" data-stage="${i}" aria-pressed="${i===si}" class="${i===rec.idx?"rec":""}"><b>${s.name}</b><small>${s.id==="basis"?"Kasse":"ab "+eur(S.kunde.kasse==="gkv"?f.gkv:f.vk)}</small></button>`}).join("")}</div>${S.override!==""?`<button type="button" class="linkbtn" data-stage="reset">Zurück zum Vorschlag</button>`:""}`)}
   ${card("Passende Geräte",devs.length?`<div class="devs">${devs.map(d=>`<button type="button" class="dev" data-dev="${d.id}" aria-pressed="${d.id===S.device}"><b>${esc(d.m)} ${esc(d.model)}</b><small>${esc(d.form)} · ${esc(d.power)} · ${band(d.ek)[0]}</small></button>`).join("")}</div><p class="muted">Geräte aus deinem Preistool.</p>`:'<p class="muted">Für diese Stufe ist noch kein Gerät im Preistool angelegt. <button type="button" class="linkbtn" data-goto="preise">Zum Preistool</button></p>')}
  </div>
  <aside class="aside">${q?`<h3>Preisorientierung</h3><span class="note">${S.kunde.kasse==="gkv"?"Gesetzlich versichert":"Privat versichert"} · ${count===2?"beidseitig":"eine Seite"}</span>
@@ -440,8 +453,7 @@ function customerView(){
  :custTab===1?`<div class="caud">${audioPair(true)}<p class="muted">Die grüne Fläche zeigt, wo Sprache liegt. Alles, was unterhalb Ihrer Hörkurve liegt, können Sie hören – Laute darüber gehen verloren.</p></div>`
  :custTab===2?`<div class="crec"><span class="pnum big">${stageIdx(st.id)+1}</span><div><h2>${st.name}</h2><p>${esc(st.sub)}</p><p class="muted">Ideal für ${esc(st.ideal)}</p></div></div>
    <div class="cgrid">${DIMS.map((d,i)=>`<div class="cbox"><span>${d}</span><small>Ihr Bedarf</small>${dots(rec.n[i],"#B8452F")}<small>${st.name}</small>${dots(st.p[i])}</div>`).join("")}</div>`
- :`<div class="cstages">${STAGES.map((s,i)=>{const f=stageFrom(s.id);return `<div class="cstage${s.id===st.id?" on":""}"><span class="pnum">${i+1}</span><b>${s.name}</b><small>${esc(s.sub)}</small>
-   <div class="mini">${DIMS.map((d,j)=>`<div><span>${d}</span>${dots(s.p[j])}</div>`).join("")}</div><span class="pfrom">${s.id==="basis"?"Kassenleistung":"ab "+eur(S.kunde.kasse==="gkv"?f.gkv:f.vk)}</span><small>${S.kunde.kasse==="gkv"&&s.id!=="basis"?"Eigenanteil je Seite":"je Seite"}</small></div>`}).join("")}</div>`;
+ :`<h2 class="ctitle">Jede Stufe kann alles der vorherigen – und mehr</h2>${treppe(STAGES.indexOf(st),rec.idx,false)}`;
  return `<div class="cust"><header><img class="clogo" src="img/logo.png" alt="Hörakustik Daugsch"><span class="muted">Ihre persönliche Hörberatung · ${esc(name())}</span>${KUNDE?"":`<button class="btn" data-custclose>Zurück zur Beratung</button>`}</header>
   <nav class="ctabs">${tabs.map((t,i)=>`<button data-ctab="${i}" aria-pressed="${i===custTab}">${t}</button>`).join("")}</nav><main>${body}</main>
   <footer class="muted">Hörakustik Daugsch · Ludwig-Schwamb-Straße 19 · 67574 Osthofen · 06242 50 69 744</footer></div>`;
@@ -655,6 +667,7 @@ p{margin:0;font-size:11pt;line-height:1.55}
 /* Stufen */
 .stages{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm}
 .stg{border:.4mm solid #DCE6E2;border-radius:5mm;padding:5mm;display:flex;flex-direction:column;gap:1.6mm;position:relative}
+.stg .sp{list-style:none;margin:1mm 0;padding:0;display:flex;flex-direction:column;gap:.8mm;font-size:9pt}.stg .sp li{padding-left:3.5mm;position:relative}.stg .sp li:before{content:"+";position:absolute;left:0;font-weight:700;color:#276955}
 .stg.on{border:.8mm solid #276955;background:#F3F8F6}
 .stg .tag{position:absolute;top:4mm;right:4mm;background:#276955;color:#fff;font-size:8pt;font-weight:700;border-radius:99px;padding:1mm 3mm}
 .stg .num{width:8mm;height:8mm;border-radius:50%;background:#1B493B;color:#fff;display:grid;place-items:center;font-size:9pt;font-weight:700}
@@ -735,9 +748,10 @@ footer img{height:7mm}
 
 <section class="page"><div class="in">
  <span class="kick">06 · Die sechs Technikstufen</span><h2>Für jeden Anspruch die passende Technik</h2>
- <p style="font-size:10.5pt;color:#3C5A50">Je höher die Stufe, desto besser unterstützen die Hörsysteme Sie in anspruchsvollen Situationen – und desto mehr arbeiten sie automatisch für Sie.</p>
+ <p style="font-size:10.5pt;color:#3C5A50">Jede Stufe kann alles der vorherigen – und mehr. Je höher die Stufe, desto besser unterstützen die Hörsysteme Sie in anspruchsvollen Situationen und desto mehr arbeiten sie automatisch für Sie.</p>
  <div class="stages">${STAGES.map((s,i)=>{const f=stageFrom(s.id);return `<div class="stg${i===si?" on":""}">${i===si?'<span class="tag">Unsere Empfehlung</span>':""}<span class="num">${i+1}</span><b>${s.name}</b><em>${esc(s.sub)}</em>
   <div class="rows">${DIMS.map((d,j)=>`<span>${d}</span>${dotsB(s.p[j],"#276955")}`).join("")}<span>Automatik</span><span>${esc(s.auto)}</span></div>
+  <ul class="sp">${(i===0&&gkv?[...s.plus,"Zuzahlungsfrei"]:s.plus).map(t=>`<li>${esc(t)}</li>`).join("")}</ul>
   <em>Ideal für ${esc(s.ideal)}</em><span class="from">${s.id==="basis"?"Kassenleistung":"ab "+eur(gkv?f.gkv:f.vk)} <small>${s.id==="basis"?(gkv?"zuzahlungsfrei":"je Hörsystem"):gkv?"Eigenanteil je Hörsystem":"je Hörsystem"}</small></span></div>`}).join("")}</div>
  ${foot(7)}</div></section>
 

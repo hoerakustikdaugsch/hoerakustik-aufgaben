@@ -504,6 +504,32 @@ dialog.wide{width:min(860px,96vw)}
 .bx .stagepick button.rec{border-style:dashed;border-color:var(--forest)}
 .bx .stagepick button[aria-pressed=true]{background:var(--deep);border-color:var(--deep);color:#fff}
 .bx .stagepick button[aria-pressed=true] small{color:var(--pale)}
+/* Leistungstreppe */
+.bx .treppe{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end}
+.bx .tstep{min-height:var(--h);box-sizing:border-box;background:var(--soft);color:var(--ink);border:0;border-radius:20px;padding:14px 13px;font:inherit;text-align:left;display:flex;flex-direction:column;gap:7px;transition:background .25s,color .25s,box-shadow .25s,transform .25s}
+.bx .treppe.pick .tstep{cursor:pointer}.bx .treppe.pick .tstep:hover{transform:translateY(-3px)}
+.bx .tstep .ttop{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.bx .tstep .tnum{width:30px;height:30px;border-radius:50%;background:#fff;color:var(--deep);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+.bx .tstep .ttag{font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;background:var(--deep);color:#fff}
+.bx .tstep b{font-size:19px;line-height:1.1}
+.bx .tstep small{font-size:13px;line-height:1.3;color:var(--muted)}
+.bx .tstep i{height:1px;background:var(--line);margin:2px 0}
+.bx .tstep em{font-style:normal;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.bx .tstep ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.bx .tstep li{font-size:14px;line-height:1.3;padding-left:18px;position:relative}
+.bx .tstep li:before{content:"+";position:absolute;left:2px;top:-1px;font-weight:700;font-size:16px;color:var(--forest)}
+.bx .tstep .tprice{margin-top:auto;padding-top:6px;font-weight:700;font-size:15px;display:flex;flex-direction:column}
+.bx .tstep .tprice small{font-weight:400;font-size:12px}
+.bx .tstep.on{background:var(--deep);color:#fff;box-shadow:0 12px 26px rgba(27,73,59,.28)}
+.bx .tstep.on small,.bx .tstep.on em{color:#CFE0DA}.bx .tstep.on i{background:#3C6B5D}
+.bx .tstep.on li:before{color:#fff}.bx .tstep.on .ttag{background:#fff;color:var(--deep)}
+.bx .tfoot{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--muted);margin-top:14px}
+.bx .tfoot i{flex:1;height:4px;border-radius:4px;background:var(--pale);position:relative}
+.bx .tfoot i:after{content:"";position:absolute;right:-4px;top:-6px;border-left:12px solid var(--pale);border-top:8px solid transparent;border-bottom:8px solid transparent}
+.bx .tnote{font-size:13px;margin:8px 0 0}
+.bx .ctitle{margin:0 0 16px}
+@media (max-width:1100px){.bx .treppe{grid-template-columns:repeat(3,minmax(0,1fr))}.bx .tstep{min-height:0}}
+@media (max-width:640px){.bx .treppe{grid-template-columns:repeat(2,minmax(0,1fr))}.bx .tfoot{display:none}}
 .bx .linkbtn{border:0;background:none;color:var(--forest);font-weight:600;text-decoration:underline;align-self:flex-start;padding:4px 0}
 .bx .devs{display:flex;flex-direction:column;gap:8px}
 .bx .dev{border:2px solid var(--line);background:#fff;border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;align-items:flex-start;text-align:left}
