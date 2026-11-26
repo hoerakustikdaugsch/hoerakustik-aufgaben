@@ -353,6 +353,102 @@ function stepZiele(){
   ${S.ziele.length<5?`<button type="button" class="btn" data-addgoal>+ Ziel hinzufügen</button>`:""}
   ${hard.length?`<div class="sugg"><span class="ql">Vorschläge aus der Bedarfsanalyse</span><div class="chips">${hard.map(h=>`<button type="button" class="chip" data-sugg="${esc(h)}">+ ${esc(h)}</button>`).join("")}</div></div>`:""}`);
 }
+/* ---------- Zusammenfassung für AkuWin / ERP (Text zum Kopieren) ---------- */
+let sumMode="punkte";
+const plain=h=>String(h||"").replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g," ").trim();
+const lst=a=>(a||[]).filter(Boolean).join(", ");
+const dots2n=t=>t.replace(/([●○]+)/g,m=>` ${(m.match(/●/g)||[]).length}/5`).replace(/\s+/g," ");
+const dw=x=>{const r=S.sit[x.id];return (r.d===3?"sehr":DIFF[r.d])+" schwierig"+(r.i!=null?", "+IMP[r.i]:"")};
+const seitTxt=v=>v.replace(/Jahre$/,"Jahren").replace(/Monate$/,"Monaten");
+function summaryText(mode){
+ const k=S.kunde,a=S.an,out=[],L=(t)=>{if(t)out.push(t)},B=(lbl,v)=>{if(v!=null&&v!==""&&!(Array.isArray(v)&&!v.length))out.push(`- ${lbl}: ${Array.isArray(v)?lst(v):v}`)},H2=t=>{if(out.length&&out[out.length-1]!=="")out.push("");out.push(t.toUpperCase())};
+ const rec=recommend(),si=curStage(),st=STAGES[si],count=ears(),dev=DEVICES.find(d=>d.id===S.device);
+ const otos=S.otos<0?(dev&&dev.oto?count:0):S.otos,q=dev?quote(dev,count,otos):null;
+ const me=H()&&H().me?(H().team().find(m=>m.id===H().me.id)||{}).name:"";
+ const yes=(v,lbl)=>v==="ja"?lbl:"";
+ const dR=degree(pta("R")),dL=degree(pta("L"));
+ const hard=SITS.filter(x=>S.sit[x.id]&&S.sit[x.id].d>=1).sort((x,y)=>(S.sit[y.id].d-S.sit[x.id].d)||((S.sit[y.id].i??0)-(S.sit[x.id].i??0)));
+ const oto=e=>{const g=a["oto"+e+"G"]||[],t=a["oto"+e+"T"]||[],ab=a["oto"+e+"A"]||"";return [g.length?"Gehörgang "+lst(g):"",t.length?"Trommelfell "+lst(t):"",ab?"Abformung "+ab:""].filter(Boolean).join("; ")};
+ const symp=[yes(a.schwindel,"Schwindel"),yes(a.druck,"Druckgefühl"),yes(a.hyper,"Geräuschempfindlichkeit"),yes(a.schmerz,"Ohrenschmerzen"),yes(a.ausfluss,"Ausfluss"),yes(a.puls,"pulsierendes Ohrgeräusch")].filter(Boolean);
+ const neg=[["schwindel","Schwindel"],["druck","Druckgefühl"],["hyper","Geräuschempfindlichkeit"],["schmerz","Ohrenschmerzen"],["ausfluss","Ausfluss"],["puls","pulsierendes Ohrgeräusch"],["tinn","Tinnitus"],["hoersturz","Hörsturz"]].filter(([f])=>a[f]==="nein").map(x=>x[1]);
+ const tinnD=[a.tinnSeite,a.tinnArt,a.tinnBel?`Belastung ${a.tinnBel}/10`:""].filter(Boolean).join(", "),tinn=a.tinn==="ja"?"Tinnitus"+(tinnD?` (${tinnD})`:""):"";
+ const hs=a.hoersturz==="ja"?["Hörsturz",a.hsWann,a.hsSeite].filter(Boolean).join(", "):"";
+ const laerm=a.laerm==="ja"?["Lärmbelastung",lst(a.laermArt)].filter(Boolean).join(": "):"";
+ const hg=a.hgAlt==="ja"?[a.hgModell,a.hgTrage?"Tragedauer "+a.hgTrage:"",a.hgZufr,a.hgStoer?"störte: "+a.hgStoer:""].filter(Boolean).join(", "):a.hgAlt==="nein"?"keine (Erstversorgung)":"";
+ const kunde=[name(),k.akuwinId?`Kd. ${k.akuwinId}`:"",k.geb?"geb. "+fmtD(k.geb):""].filter(Boolean).join(", ");
+ const kasse=k.kasse==="gkv"?"gesetzlich"+(k.kk?" ("+k.kk+")":""):"privat"+(k.kk?" ("+k.kk+")":"");
+ const flagsL=flags();
+ L(`Hörberatung vom ${new Date().toLocaleDateString("de-DE")}${me?" – "+me:""}`);
+ L(`Kunde: ${kunde}`);
+ if(mode==="text"){
+  const p=[];
+  p.push(`${[k.anrede,name()].filter(Boolean).join(" ")} kommt zur ${k.versorgung==="folge"?"Folgeversorgung":"Erstversorgung"} (${kasse}${k.verordnung?", Verordnung "+k.verordnung+(k.vdatum?" vom "+fmtD(k.vdatum):""):""}${k.hno?", HNO "+k.hno:""}).`);
+  const an=[a.seit?`Hörminderung seit ${seitTxt(a.seit)}`:"",a.verlauf?a.verlauf:"",a.seite?a.seite:"",a.bemerkt?`bemerkt durch ${a.bemerkt}`:""].filter(Boolean);
+  if(an.length)p.push(an.join(", ").replace(/^./,c=>c.toUpperCase())+".");
+  const ev=[hs,laerm,a.entz.length?"Befunde: "+lst(a.entz):"",a.ops.length?"OPs: "+lst(a.ops):"",a.ereignisSonst||""].filter(Boolean);
+  if(ev.length)p.push(ev.join("; ")+".");
+  const bs=[tinn,...symp].filter(Boolean);p.push(bs.length?`Begleitsymptome: ${bs.join(", ")}.`:neg.length?`Verneint: ${neg.join(", ")}.`:"");
+  const allg=[a.allergie==="ja"?"Allergie"+(a.allergieText?" ("+a.allergieText+")":""):"",a.familie==="ja"?"familiäre Schwerhörigkeit":"",a.allg.length?lst(a.allg):"",a.meds?"Medikamente: "+a.meds:"",a.handling.length?"Handhabung: "+lst(a.handling):""].filter(Boolean);
+  if(allg.length)p.push(allg.join("; ")+".");
+  if(hg)p.push(`Bisherige Hörgeräte: ${hg}.`);
+  const os=["R","L"].map(e=>oto(e)?(e==="R"?"rechts ":"links ")+oto(e):"").filter(Boolean);if(os.length)p.push(`Otoskopie ${os.join(" | ")}.`);
+  if(dR||dL)p.push(`Audiogramm${S.audioSrc?" vom "+fmtD(S.audioSrc.date):""}: rechts ${dR||"–"}${pta("R")!=null?" ("+Math.round(pta("R"))+" dB)":""}, links ${dL||"–"}${pta("L")!=null?" ("+Math.round(pta("L"))+" dB)":""}.`);
+  if(hard.length)p.push(`Schwierigkeiten vor allem bei: ${hard.slice(0,6).map(x=>`${x.t} (${dw(x)})`).join(", ")}.`);
+  const lb=[S.leben.length?lst(S.leben):"",S.phone?"Smartphone: "+S.phone:"",S.technik?"Technik-Erfahrung "+S.technik:""].filter(Boolean);if(lb.length)p.push(`Lebenssituation: ${lb.join(", ")}.`);
+  const wu=[S.wuensche.length?lst(S.wuensche):"",S.bauform?"Bauform "+S.bauform:"",S.energie&&S.energie!=="egal"?S.energie:"",S.budget?"Budget "+S.budget:""].filter(Boolean);if(wu.length)p.push(`Wünsche: ${wu.join(", ")}.`);
+  const zi=S.ziele.filter(z=>z.t);if(zi.length)p.push(`Hörziele: ${zi.map(z=>z.t).join("; ")}.`);
+  p.push(`Empfehlung: Technikstufe ${si+1} ${st.name}${S.override!==""?` (angepasst, Vorschlag war ${STAGES[rec.idx].name})`:""}${dev?`, ${dev.m} ${dev.model} (${dev.form})`:""}, ${count===2?"beidseitig":"einseitig"}${q?`, ${k.kasse==="gkv"?"Eigenanteil":"Preis"} ca. ${eur(q.total)}`:""}.`);
+  if(rec.notes.length)p.push(rec.notes.join(". ")+".");
+  if(S.frei)p.push(`Notiz: ${S.frei}`);
+  if(flagsL.length)p.push(`Ärztliche Abklärung empfohlen: ${flagsL.join(", ")}.`);
+  out.push("");out.push(p.filter(Boolean).join(" "));
+  const tm=(S.termine||[]);if(tm.length){out.push("");out.push("Termine: "+tm.slice(0,4).map(t=>new Date(t.start).toLocaleDateString("de-DE")+" "+t.start.slice(11,16)+" "+t.type).join("; "))}
+  return out.join("\n");
+ }
+ B("Versicherung",kasse);B("Versorgung",k.versorgung==="folge"?"Folgeversorgung":"Erstversorgung");
+ B("Verordnung",[k.verordnung,k.vdatum?"vom "+fmtD(k.vdatum):""].filter(Boolean).join(" "));B("HNO",k.hno);B("Telefon",k.tel);
+ H2("Anamnese");
+ B("Hörminderung seit",a.seit);B("Verlauf",a.verlauf);B("Seite",a.seite);B("Bemerkt durch",a.bemerkt);
+ B("Hörsturz",a.hoersturz==="ja"?[a.hsWann,a.hsSeite].filter(Boolean).join(", ")||"ja":a.hoersturz);
+ B("Lärmbelastung",a.laerm==="ja"?lst(a.laermArt)||"ja":a.laerm);
+ B("Entzündungen/Befunde",a.entz);B("Operationen",a.ops);B("Sonstige Ereignisse",a.ereignisSonst);
+ B("Tinnitus",a.tinn==="ja"?tinnD||"ja":a.tinn);
+ B("Begleitsymptome",symp);B("Verneint",neg.filter(x=>x!=="Tinnitus"&&x!=="Hörsturz"));
+ B("Ohrenschmalz-Neigung",a.schmalz);B("Allergien",a.allergie==="ja"?a.allergieText||"ja":a.allergie);B("Familiäre Schwerhörigkeit",a.familie);
+ B("Allgemeinerkrankungen",a.allg);B("Medikamente",a.meds);B("Handhabung",a.handling);B("Bisherige Hörgeräte",hg);
+ if(oto("R")||oto("L")){H2("Otoskopie");B("Rechts",oto("R"));B("Links",oto("L"))}
+ if(flagsL.length){H2("Ärztliche Abklärung empfohlen");flagsL.forEach(f=>L("- "+f))}
+ if(dR||dL){H2("Audiogramm");B("Messung",S.audioSrc?fmtD(S.audioSrc.date)+" (aus AkuWin)":"");
+  B("Rechts",dR?`${dR}${pta("R")!=null?", Mittelwert "+Math.round(pta("R"))+" dB":""}`:"");B("Links",dL?`${dL}${pta("L")!=null?", Mittelwert "+Math.round(pta("L"))+" dB":""}`:"")}
+ H2("Bedarfsanalyse");
+ if(hard.length){L("Schwierige Situationen (Schwierigkeit, Häufigkeit):");hard.forEach(x=>L(`- ${x.t}: ${dw(x)}`))}else L("- keine Schwierigkeiten angegeben");
+ B("Hörbedarf",DIMS.map((d,i)=>`${d} ${rec.n[i]}/5`).join(" · "));
+ B("Lebenssituation",S.leben);B("Smartphone",S.phone);B("Technik-Erfahrung",S.technik);B("Notiz",S.frei);
+ if(S.wuensche.length||S.bauform||S.energie||S.budget){H2("Wünsche");B("Ausstattung",S.wuensche);B("Bauform",S.bauform);B("Energie",S.energie);B("Budget",S.budget)}
+ const zi=S.ziele.filter(z=>z.t);if(zi.length){H2("Hörziele");zi.forEach((z,i)=>L(`${i+1}. ${z.t} (Priorität ${z.p})`))}
+ H2("Empfehlung");
+ B("Technikstufe",`${si+1} · ${st.name}${S.override!==""?` (angepasst, Vorschlag war ${STAGES[rec.idx].name})`:""}`);
+ if(rec.reasons.length)B("Begründung",rec.reasons.map(r=>dots2n(plain(r))).join("; "));
+ B("Gerät",dev?`${dev.m} ${dev.model} (${dev.form})`:"");B("Versorgung",count===2?"beidseitig":"einseitig");
+ if(q){B("Preisorientierung",q.lines.map(l=>`${l[0]} ${eur(l[1])}`).join("; "));B(k.kasse==="gkv"?"Eigenanteil gesamt":"Gesamt",eur(q.total))}
+ rec.notes.forEach(n=>L("- Hinweis: "+n));
+ if(S.oto.sent||S.oto.needed==="ja"){H2("Otoplastik");B("Status",S.oto.sent?"Laborauftrag gesendet":"benötigt");B("Abformung",fmtD(S.oto.abformung&&S.oto.abformung.datum));B("Nächster Anpasstermin",S.oto.due?fmtD(S.oto.due):"")}
+ const tm=S.termine||[];if(tm.length){H2("Termine");tm.slice(0,6).forEach(t=>L(`- ${new Date(t.start).toLocaleDateString("de-DE")} ${t.start.slice(11,16)} Uhr · ${t.type}${t.res?" · "+t.res:""}`))}
+ if(S.tasks.length){H2("Angelegte Aufgaben");S.tasks.forEach(t=>L(`- ${t.title}${t.due?" (fällig "+t.due+")":""}`))}
+ return out.join("\n");
+}
+function summaryCard(){
+ return card("Zusammenfassung für AkuWin",`<p class="muted">Anamnese, Bedarfsanalyse und Empfehlung als Text – kopieren und in AkuWin in die Kundennotiz einfügen. Du kannst den Text vorher noch ändern.</p>
+  <div class="sumbar"><div class="pseg"><button type="button" data-summode="punkte" aria-pressed="${sumMode==="punkte"}">Stichpunkte</button><button type="button" data-summode="text" aria-pressed="${sumMode==="text"}">Fließtext</button></div>
+  <button type="button" class="btn primary" data-sumcopy>${'<svg class="i" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>'}Text kopieren</button></div>
+  <textarea id="sumText" class="sumtext" spellcheck="false" aria-label="Zusammenfassung">${esc(summaryText(sumMode))}</textarea>`);
+}
+async function copySummary(){
+ const ta=document.getElementById("sumText"),txt=ta?ta.value:summaryText(sumMode);
+ try{await navigator.clipboard.writeText(txt)}catch(e){if(ta){ta.focus();ta.select();document.execCommand("copy")}}
+ H().toast("Zusammenfassung kopiert – jetzt in AkuWin einfügen");
+}
+
 /* Leistungstreppe: jede Stufe zeigt, was neu dazukommt */
 function treppe(si,recIdx,pick){
  const gkv=S.kunde.kasse==="gkv";
@@ -384,7 +480,7 @@ function stepEmpfehlung(){
   <div class="pseg"><button data-otos="0" aria-pressed="${otos===0}">ohne Otoplastik</button><button data-otos="${count}" aria-pressed="${otos===count}">${count} Otoplastik${count>1?"en":""}</button></div>
   <div class="plines">${q.lines.map(l=>`<div><span>${esc(l[0])}</span><b>${eur(l[1])}</b></div>`).join("")}<div class="ptotal"><span>${S.kunde.kasse==="gkv"?"Eigenanteil":"Gesamt"}</span><b>${eur(q.total)}</b></div></div>
   <small class="note">Unverbindliche Preisorientierung. Der endgültige Preis richtet sich nach der gewählten Versorgung und wird in einem Kostenvoranschlag festgehalten.</small>
-  <button class="btn light" data-cust>Dem Kunden zeigen</button>`:'<h3>Preisorientierung</h3><span class="note">Bitte ein Gerät wählen.</span>'}</aside></div>`;
+  <button class="btn light" data-cust>Dem Kunden zeigen</button><button class="btn light" data-sumcopy>Zusammenfassung kopieren</button>`:'<h3>Preisorientierung</h3><span class="note">Bitte ein Gerät wählen.</span>'}</aside></div>`;
 }
 /* Eigene Aufgabe mit Kundenbezug */
 function freeTaskForm(){
@@ -414,7 +510,7 @@ function stepAbschluss(){
   <div class="quick">${quick.map(([id,l,t,c])=>{const done=S.tasks.find(x=>x.id===id);return `<button type="button" class="qbtn" data-task="${id}" data-title="${esc(t)}" data-cat="${c}" ${done?"disabled":""}>${done?"✓ ":"+ "}${l}</button>`}).join("")}</div>
   ${freeTaskForm()}
   ${S.tasks.length?`<div class="tlist">${S.tasks.map(t=>`<div><span class="tile t-kunden">✓</span><div><b>${esc(t.title)}</b><small>${esc(t.cat)} · fällig ${esc(t.due)}${t.who?" · "+esc(t.who):""} · erscheint in „Aufgaben“</small></div></div>`).join("")}</div>`:""}`)+
- termineCard()+
+ termineCard()+summaryCard()+
  card("Broschüre für den Kunden",`<div class="brochure"><div class="bthumb"><span>Hörakustik Daugsch</span><b>Ihre persönliche Hörberatung</b><small>${esc(n)}</small></div>
   <div><p>Die Broschüre fasst alles zusammen: Hörsituation, Audiogramm, Hörprofil, Wünsche und Hörziele, Empfehlung mit Leistungsprofil, Preisorientierung und die Übersicht aller sechs Technikstufen – gestaltet für den Druck auf A4.</p>
   <button class="btn primary" data-brochure>Broschüre erstellen</button></div></div>`)+card("Beratung abschließen",`<p class="muted">${S.status==="abgeschlossen"?"Diese Beratung ist abgeschlossen.":"Alles wird laufend gespeichert. Mit „Abschließen“ markierst du die Beratung als fertig."}</p><button class="btn ${S.status==="abgeschlossen"?"":"primary"}" data-finish>${S.status==="abgeschlossen"?"Wieder öffnen":"Beratung abschließen"}</button>`);
@@ -824,6 +920,8 @@ document.addEventListener("click",e=>{
  if(d.otowho!=null){const cur=S.oto.assignee===undefined?H().me?.id:S.oto.assignee;S.oto.assignee=cur===d.otowho?null:d.otowho;changed();rr();return}
  if(d.otosend!=null){sendLab();return}
  if(d.brochure!=null){saveNow();openBrochure();return}
+ if(d.summode){sumMode=d.summode;rr();return}
+ if(d.sumcopy!=null){copySummary();return}
  if(d.finish!=null){S.status=S.status==="abgeschlossen"?"offen":"abgeschlossen";changed();saveNow();toast(S.status==="abgeschlossen"?"Beratung abgeschlossen":"Beratung wieder geöffnet");rr();return}
  if(d.cust!=null||d.bcustwin!=null){custTab=step===6?2:0;openCustomerWindow();return}
  if(d.custclose!=null){customer=false;H().rerender();return}

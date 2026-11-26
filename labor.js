@@ -136,6 +136,19 @@ function earSpec(o,side){const s=o.spec||{};return s.same!==false?s.R||{}:s[side
 function summary(o){const r=earSpec(o,o.sides==="links"?"L":"R");return [r.anbindung==="Schlafschutz"?"Schlafschutz":"",r.form,r.occlufree?"OccluFree":"",r.skelettiert?"skelettiert":"",r.material&&r.material.split(" (")[0]+(r.haerte&&r.material.startsWith("Weich")?" "+r.haerte:""),r.farbe,r.vent&&r.vent!=="Keine"?"Vent "+r.vent:""].filter(Boolean).join(" · ")}
 const sideChips=o=>(o.sides==="beide"?["R","L"]:[o.sides==="rechts"?"R":"L"]).map(s=>`<span class="ear ${s}">${s==="R"?"Rechts":"Links"}</span>`).join("");
 
+/* ---------- Cockpit-Spalte auf der Startseite ---------- */
+function cockpitHtml(){
+ const open=st.orders.filter(o=>!o.delivered_at);
+ const byDue=(a,b)=>(b.urgent-a.urgent)||((a.due||"9")>(b.due||"9")?1:-1);
+ const steps=COLS.map(c=>({c,n:open.filter(o=>c.stages.includes(o.stage)).length}));
+ const list=open.slice().sort(byDue).slice(0,3);
+ return `<div class="cksteps">${steps.map(({c,n})=>`<span class="${n?"on":""}${c.k==="fertig"?" fin":""}"><b>${n}</b><small>${esc(c.k==="neu"?"Reinigen":c.t)}</small></span>`).join("")}</div>
+ ${list.length?list.map(o=>{const n=daysTo(o.due),late=n!=null&&n<0&&o.stage<6,col=COLS.find(c=>c.stages.includes(o.stage))||COLS[0];
+  return `<button type="button" class="ckorder${late?" late":""}" data-ck-lab="${esc(o.id)}"><span class="ckn"><b>${esc(o.customer)}</b>${o.akuwin_id?`<span class="kdnr">Kd. ${esc(o.akuwin_id)}</span>`:""}</span>
+   <small>${esc(col.t)} · ${esc(sidesTxt(o))}${o.due?` · <span class="${late?"late":""}">${esc(dueLabel(o.due))}</span>`:""}</small></button>`}).join("")
+  :`<p class="ckempty">${st.loaded?"Keine offenen Laboraufträge.":"Lädt …"}</p>`}`;
+}
+
 /* ---------- Ansicht ---------- */
 function track(o){
  return `<ol class="ltrack">${STEPS.map((s,i)=>{const cls=i<o.stage?"done":i===o.stage?"now":"";return `<li class="${cls}"><span class="ldot">${i<o.stage?"✓":i+1}</span><small>${s.t}</small></li>`}).join("")}</ol>`;
@@ -268,5 +281,5 @@ document.addEventListener("click",e=>{
  const o=el.closest("[data-l-open]");if(o){openDetail(o.dataset.lOpen);return}
 },true);
 
-window.HD_LABOR={render,load,openForm,openDetail,syncTask,whoChips,specFields,loadLists,STEPS,COLS,OPT,LISTS,state:st,openCount:()=>st.orders.filter(o=>!o.delivered_at).length,lateCount:()=>st.orders.filter(o=>!o.delivered_at&&o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length};
+window.HD_LABOR={cockpitHtml,render,load,openForm,openDetail,syncTask,whoChips,specFields,loadLists,STEPS,COLS,OPT,LISTS,state:st,openCount:()=>st.orders.filter(o=>!o.delivered_at).length,lateCount:()=>st.orders.filter(o=>!o.delivered_at&&o.stage<6&&daysTo(o.due)!=null&&daysTo(o.due)<0).length};
 })();

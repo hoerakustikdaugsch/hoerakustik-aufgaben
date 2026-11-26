@@ -118,6 +118,17 @@ function todayHtml(){
   <button class="btn" data-go="kalender" style="align-self:flex-start">Zum Kalender ›</button></section>`;
 }
 
+function cockpitHtml(){
+ if(!H().sb)return `<p class="ckempty">Nicht verbunden.</p>`;
+ const wk=st.cache[weekKey(new Date())];
+ if(!wk){if(!st.loading&&!st.err)load(false,new Date());return `<p class="ckempty">${st.err?"AkuWin gerade nicht erreichbar.":"Termine werden geladen …"}</p>`}
+ const key=iso(new Date()),nowM=new Date().getHours()*60+new Date().getMinutes();
+ const c=wk.list.filter(a=>a.start.slice(0,10)===key&&a.state!=="Cancelled");
+ const next=c.filter(a=>mins(a.end)>=nowM).slice(0,5);
+ return {n:c.length,html:next.length?next.map(a=>`<button type="button" class="ckappt" data-kopen="${esc(a.id)}" style="--tc:${esc(typeColor(a))}"><span class="ckt">${a.allDay?"ganzt.":hm(a.start)}</span><span class="ckn"><b>${esc(a.client||a.note||a.type)}</b><small>${esc(a.type)}${a.resources.length?" · "+a.resources.map(resShort).map(esc).join(", "):""}</small></span></button>`).join("")
+  :`<p class="ckempty">${c.length?"Für heute sind alle Termine vorbei.":"Heute keine Termine in AkuWin."}</p>`};
+}
+
 /* Termin-Details */
 function openDetail(id){
  let a=null;for(const k in st.cache){a=st.cache[k].list.find(x=>x.id===id);if(a)break}if(!a)return;
@@ -155,5 +166,5 @@ document.addEventListener("click",e=>{
 });
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&H()&&H().page&&(H().page()==="kalender"||H().page()==="start"))load(true)});
 
-window.HD_KALENDER={render,load,todayHtml,state:st};
+window.HD_KALENDER={cockpitHtml,render,load,todayHtml,state:st};
 })();

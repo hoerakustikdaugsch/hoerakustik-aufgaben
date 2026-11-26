@@ -36,7 +36,9 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .brand .logo{height:42px;width:auto;display:block}
 .mainnav{display:flex;gap:2px;margin-left:8px}
 .mainnav button{border:0;background:none;padding:10px 13px;border-radius:99px;color:var(--muted);font-size:15px;display:flex;align-items:center;gap:6px;min-height:42px}
-.mainnav button[aria-current=page]{background:var(--card);color:var(--ink);font-weight:600}
+.mainnav{background:var(--card);padding:4px;border-radius:99px}
+.mainnav button[aria-current=page]{background:var(--deep);color:#fff;font-weight:600}
+.mainnav button[aria-current=page] .cnt{background:#fff;color:var(--deep)}
 .mainnav button:disabled{cursor:default;opacity:.7}
 .soon{font-size:11px;font-weight:700;background:var(--pale);color:var(--deep);border-radius:99px;padding:1px 7px}
 .topright{margin-left:auto;display:flex;align-items:center;gap:12px}
@@ -504,6 +506,45 @@ dialog.wide{width:min(860px,96vw)}
 .bx .stagepick button.rec{border-style:dashed;border-color:var(--forest)}
 .bx .stagepick button[aria-pressed=true]{background:var(--deep);border-color:var(--deep);color:#fff}
 .bx .stagepick button[aria-pressed=true] small{color:var(--pale)}
+/* Cockpit (Startseite) */
+.ckhead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:4px 0 18px}
+.ckhead .date{color:var(--muted);font-size:15px}.ckhead h1{margin:2px 0 0;font-size:32px}
+.ckquick{display:flex;gap:10px;flex-wrap:wrap}
+.cktabs{display:none}
+.cockpit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
+.ckcol{background:var(--card);border-radius:22px;padding:20px;display:flex;flex-direction:column;gap:4px;min-height:420px;box-sizing:border-box}
+.ckcol>header{display:flex;align-items:center;gap:10px;padding-bottom:10px}
+.ckcol>header h2{margin:0;font-size:20px}.ckcount{margin-left:auto;font-size:14px;color:var(--muted)}
+.ckic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}.ckic .i{width:18px;height:18px}
+.ic-t{background:#E3EEF8;color:#1F4B73}.ic-a{background:#E7F1ED;color:var(--deep)}.ic-l{background:#F7EDE0;color:#6B3F10}
+.ckn{display:flex;flex-direction:column;gap:2px;min-width:0;text-align:left}.ckn b{font-size:16px;font-weight:600}.ckn small{font-size:14px;color:var(--muted)}
+.ckn .late,.ckorder small .late{color:var(--hot);font-weight:700}
+.ckappt{display:grid;grid-template-columns:58px minmax(0,1fr);gap:12px;align-items:start;padding:10px 0 10px 10px;border:0;border-top:1px solid var(--line);background:none;font:inherit;color:inherit;cursor:pointer;text-align:left;box-shadow:inset 3px 0 0 var(--tc)}
+.ckappt .ckt{font-weight:700;font-size:15px}
+.ckappt:hover,.ckorder:hover{background:var(--soft)}
+.ckbar{height:8px;border-radius:4px;background:var(--soft);overflow:hidden;margin-bottom:8px}.ckbar i{display:block;height:100%;background:var(--forest);transition:width .5s}
+.ckwho{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.ckwho button{height:32px;padding:0 12px;border-radius:99px;border:1px solid var(--line);background:#fff;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.ckwho button[aria-pressed=true]{background:var(--deep);border-color:var(--deep);color:#fff}
+.task.ckrow{display:flex;align-items:center;gap:12px;padding:10px 0;border:0;border-top:1px solid var(--line);border-radius:0;background:none;box-shadow:none;min-height:0;cursor:pointer}
+.task.ckrow .check{position:static;width:30px;height:30px;flex:none;margin:0}
+.task.ckrow.urgent .check{border-color:var(--hot)}
+.cksteps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;margin-bottom:8px}
+.cksteps span{display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 2px;border-radius:12px;background:var(--soft);color:var(--muted)}
+.cksteps span.on{background:#F7EDE0;color:#6B3F10}.cksteps span.on.fin{background:#E7F1ED;color:var(--deep)}
+.cksteps b{font-size:20px}.cksteps small{font-size:10.5px;text-align:center;line-height:1.15}
+.ckorder{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:0;border-radius:14px;background:var(--soft);font:inherit;color:inherit;text-align:left;cursor:pointer;margin-top:6px}
+.ckorder .ckn{flex-direction:row;align-items:center;gap:8px}.ckorder small{font-size:14px;color:var(--muted)}
+.ckorder.late{box-shadow:inset 3px 0 0 var(--hot)}
+.ckempty{color:var(--muted);margin:10px 0}
+.cklink{margin-top:auto;align-self:flex-start;border:0;background:none;color:var(--forest);font:inherit;font-weight:600;font-size:15px;padding:12px 0 0;display:flex;align-items:center;gap:6px;cursor:pointer}.cklink .i{width:16px;height:16px}
+@media (max-width:900px){
+ .ckhead h1{font-size:26px}.ckquick{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.ckquick .btn{flex-direction:column;justify-content:center;gap:4px;font-size:13px;padding:8px 4px;min-height:60px;border-radius:16px;line-height:1.15;text-align:center}
+ .cktabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--card);padding:4px;border-radius:14px;margin-bottom:12px}
+ .cktabs button{height:42px;border:0;border-radius:11px;background:none;color:var(--muted);font:inherit;font-size:14px;font-weight:600}
+ .cktabs button[aria-pressed=true]{background:var(--deep);color:#fff}
+ .cockpit{grid-template-columns:1fr}.ckcol{display:none;min-height:0}.ckcol.show{display:flex}
+}
 /* Mehrwert je Stufe (Preistool) */
 .nutzen{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .ncard{background:#fff;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -516,6 +557,10 @@ dialog.wide{width:min(860px,96vw)}
 .ncard .btn.light{align-self:flex-start}
 @media (max-width:1000px){.nutzen{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.nutzen{grid-template-columns:1fr}}
+/* Zusammenfassung für AkuWin */
+.bx .sumbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 0 10px}
+.bx .sumbar .pseg{margin:0;background:var(--soft);min-width:260px}.bx .sumbar .pseg button{color:var(--muted);padding:0 14px;font-size:14px}.bx .sumbar .pseg button[aria-pressed=true]{background:var(--deep);color:#fff}
+.bx .sumtext{width:100%;min-height:340px;box-sizing:border-box;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:14px;color:var(--ink);resize:vertical;white-space:pre-wrap}
 /* Leistungstreppe */
 .bx .treppe{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end}
 .bx .tstep{min-height:var(--h);box-sizing:border-box;background:var(--soft);color:var(--ink);border:0;border-radius:20px;padding:14px 13px;font:inherit;text-align:left;display:flex;flex-direction:column;gap:7px;transition:background .25s,color .25s,box-shadow .25s,transform .25s}

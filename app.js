@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.15.0 · Mehrwert je Stufe selbst pflegen";
+const VERSION="1.16.0 · Cockpit-Startseite und Beratungs-Zusammenfassung";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -18,7 +18,8 @@ const IC={
  cal:'<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/>',
  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
  arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
- plus:'<path d="M12 5v14M5 12h14"/>'};
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ flask:'<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3"/>'};
 const ICON_OF={"Rückruf":"phone","Anpassung":"user","Reservierung":"user","Aufarbeitung":"wrench","Reparatur":"wrench","Otoplastik":"wrench","Bestellung":"box","Zubehör":"box","Lagerausbuchung":"box","Rücksendung Hersteller":"box"};
 const svg=(n,s="")=>`<svg class="i" viewBox="0 0 24 24"${s}>${IC[n]}</svg>`;
 const PRIO={hoch:0,normal:1,niedrig:2};
@@ -155,10 +156,34 @@ const sec=(title,list,cls="")=>list.length?`<section class="list ${cls}"><h3>${t
 const emptyBox=txt=>`<div class="empty"><svg viewBox="0 0 120 50" width="120" height="50" aria-hidden="true"><path d="M2 25 C22 5 42 45 62 25 S102 5 118 25" fill="none" stroke="#8BAAA2" stroke-width="4" stroke-linecap="round"/><path d="M2 40 C22 20 42 60 62 40 S102 20 118 40" fill="none" stroke="#B7C6C2" stroke-width="4" stroke-linecap="round"/></svg><p>${txt}</p></div>`;
 
 /* ---------- Seiten ---------- */
+/* Startseite als Cockpit: Termine · Aufgaben · Labor, je höchstens 5 Einträge */
+let ckTab=ls.get("ckTab")||"aufgaben";
+function ckTask(t){
+ const T=iso(new Date()),late=t.due&&t.due<T;
+ const meta=[t.customer?esc(t.customer)+(t.akuwinId?` <span class="kdnr">Kd. ${esc(t.akuwinId)}</span>`:""):"",late?'<span class="late">überfällig</span>':t.due&&t.due>T?esc(relDate(t.due)):"",person==="alle"&&t.assignee?esc(firstName(t.assignee)):""].filter(Boolean).join(" · ");
+ return `<article class="task ckrow${late||t.priority==="hoch"?" urgent":""}${t.id===arrived?" arrive":""}" data-id="${esc(t.id)}">
+  <button class="check" data-check aria-label="Als erledigt markieren"></button>
+  <span class="ckn"><b>${esc(t.title)}</b>${meta?`<small>${meta}</small>`:""}</span></article>`;
+}
 function startPage(){
- const s=stats(),next=s.open.slice().sort(urgency).slice(0,5);
- return hero()+(window.HD_KALENDER?window.HD_KALENDER.todayHtml():"")+peopleRow()+
-  `<section class="list"><h3>Als Nächstes <small>${next.length}</small></h3>${next.length?next.map(card).join(""):emptyBox("Keine offenen Aufgaben.")}${s.open.length>5?`<button class="btn" data-go="aufgaben" style="align-self:flex-start">Alle ${s.open.length} Aufgaben ${svg("arrow")}</button>`:""}</section>`;
+ const s=stats(),now=new Date(),who=firstName(me.id);
+ const next=s.open.slice().sort(urgency).slice(0,5),pct=s.ringTotal?Math.round(s.doneToday/s.ringTotal*100):0;
+ const K=window.HD_KALENDER?window.HD_KALENDER.cockpitHtml():{n:0,html:""},kk=typeof K==="string"?{n:"",html:K}:K;
+ const L=window.HD_LABOR,lopen=L?L.openCount():0;
+ const col=(id,ic,cls,title,count,body,link,linkTxt)=>`<section class="ckcol${ckTab===id?" show":""}" aria-label="${title}">
+   <header><span class="ckic ${cls}">${svg(ic)}</span><h2>${title}</h2><span class="ckcount">${count}</span></header>${body}
+   <button type="button" class="cklink" data-go="${link}">${linkTxt} ${svg("arrow")}</button></section>`;
+ return `<div class="ckhead"><div><span class="date">${now.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})}</span><h1>${esc(greeting())}${who?", "+esc(who):""}</h1></div>
+  <div class="ckquick"><button type="button" class="btn primary" data-ck-task>${svg("plus")}Aufgabe</button><button type="button" class="btn light" data-ck-bnew>${svg("chat")}Beratung starten</button><button type="button" class="btn light" data-ck-labnew>${svg("flask")}Laborauftrag</button></div></div>
+ <div class="cktabs" role="group" aria-label="Bereich">${[["termine","Termine",kk.n],["aufgaben","Aufgaben",s.od.length+s.td.length],["labor","Labor",lopen]].map(([id,t,n])=>`<button type="button" data-ck-tab="${id}" aria-pressed="${ckTab===id}">${t}${n?` <small>${n}</small>`:""}</button>`).join("")}</div>
+ <div class="cockpit">
+  ${col("termine","cal","ic-t","Termine heute",kk.n,kk.html,"kalender","Zum Kalender")}
+  ${col("aufgaben","check","ic-a",person==="alle"?"Aufgaben":person===me.id?"Meine Aufgaben":"Aufgaben von "+esc(firstName(person)),`${s.doneToday} / ${s.ringTotal} erledigt`,
+   `<div class="ckbar" role="img" aria-label="${s.doneToday} von ${s.ringTotal} heute erledigt"><i style="width:${pct}%"></i></div>
+    <div class="ckwho" role="group" aria-label="Aufgaben von">${[["alle","Alle"],...team.map(m=>[m.id,firstName(m.id)||m.name])].map(([id,n])=>`<button type="button" data-person="${esc(id)}" aria-pressed="${person===id}">${esc(n)}</button>`).join("")}</div>
+    ${next.length?next.map(ckTask).join(""):`<p class="ckempty">${s.open.length?"":"Keine offenen Aufgaben."}</p>`}`,"aufgaben",s.open.length>5?`Alle ${s.open.length} Aufgaben`:"Alle Aufgaben")}
+  ${col("labor","flask","ic-l","Labor",lopen?lopen+" offen":"",L?L.cockpitHtml():"","labor","Zum Labor-Board")}
+ </div>`;
 }
 function tasksPage(){
  if(tab==="labor")tab="tag";
@@ -198,6 +223,7 @@ function render(){
  $("main").innerHTML=p==="aufgaben"?tasksPage():p==="labor"?laborPage():p==="kalender"?(window.HD_KALENDER?window.HD_KALENDER.render():emptyBox("Kalender wird geladen …")):p==="preise"&&window.HD_PREISE?window.HD_PREISE.render():p==="beratung"&&window.HD_BERATUNG?window.HD_BERATUNG.render():startPage();
  if(focus){const i=$("q");i.focus();i.setSelectionRange(i.value.length,i.value.length)}
  $("meLine").textContent="Angemeldet als "+(nameOf(me.id)||me.email);
+ $("addBtn").hidden=p==="start";$("fab").hidden=p==="start";
 }
 function go(target){
  if(target==="erledigt"){page="aufgaben";tab="erledigt"}
@@ -291,6 +317,11 @@ document.addEventListener("click",e=>{
  const el=e.target;if(!me||el.closest("[data-stop]")||el.closest("dialog"))return;
  const g=el.closest("[data-go]");if(g){e.preventDefault();go(g.dataset.go);return}
  const tb=el.closest("[data-tab]");if(tb){tab=tb.dataset.tab;render();return}
+ const ckt=el.closest("[data-ck-tab]");if(ckt){ckTab=ckt.dataset.ckTab;ls.set("ckTab",ckTab);render();return}
+ if(el.closest("[data-ck-task]")){openForm(null,person!=="alle"?{assignee:person}:{});return}
+ if(el.closest("[data-ck-bnew]")){window.HD_BERATUNG&&window.HD_BERATUNG.startWith("");return}
+ if(el.closest("[data-ck-labnew]")){go("labor");setTimeout(()=>window.HD_LABOR&&window.HD_LABOR.openForm(),60);return}
+ const ckl=el.closest("[data-ck-lab]");if(ckl){window.HD_LABOR&&window.HD_LABOR.openDetail(ckl.dataset.ckLab);return}
  const p=el.closest("[data-person]");if(p){person=p.dataset.person;ls.set("person",person);render();return}
  const c=el.closest("[data-cat]");if(c){cat=c.dataset.cat;ls.set("cat",cat);render();return}
  const o=el.closest("[data-open]");if(o){const t=tasks.find(x=>x.id===o.dataset.open);if(t)openTask(t);return}
