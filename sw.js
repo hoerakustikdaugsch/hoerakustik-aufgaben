@@ -1,6 +1,6 @@
 // Service Worker: macht die App installierbar und startet sie auch bei schwachem Netz.
 // Aufgaben-Daten werden NICHT hier zwischengespeichert – die kommen immer live aus Supabase.
-const CACHE = "hd-portal-v13";
+const CACHE = "hd-portal-v14";
 const SHELL = ["./", "./index.html", "./app.js", "./preise.js", "./labor.js", "./beratung.js", "./kalender.js", "./config.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/emblem.png", "./icons/apple-touch-icon.png", "./icons/favicon-32.png", "./img/logo.png", "./img/logo-weiss.png"];
 const CDN = ["https://cdn.jsdelivr.net/", "https://unpkg.com/", "https://cdnjs.cloudflare.com/"];

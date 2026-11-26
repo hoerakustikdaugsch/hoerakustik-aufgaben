@@ -32,12 +32,13 @@ const DIFF=["keine","leicht","deutlich","sehr"],IMP=["selten","regelmäßig","t�
 const FREQ=[250,500,1000,2000,3000,4000,6000,8000];
 
 /* ---------- Anbindung ans Preistool ---------- */
-let SNAP_PRICES=null;
+let SNAP_PRICES=null,SNAP_PLUS=null;
 const P=()=>window.HD_PREISE;
 let DEVICES=[];
 const refreshDevices=()=>{DEVICES=P()?(P().state.devices||[]).filter(d=>d.active!==false).map(d=>({id:d.id,m:d.manufacturer,model:d.model,form:d.form||"",power:d.power||"",ek:Number(d.ek),oto:!!d.otoplastic,raw:d})).sort((a,b)=>a.ek-b.ek):[]};
 const band=ek=>{const b=P()&&P().bandFor(ek);return b?[b.name,b.stage,0,0,Number(b.vk_private)]:["–","",0,0,0]};
 function quote(dev,count,otos){const q=P()&&P().quote(dev.raw,S.kunde.kasse==="gkv"?"gkv":"privat",count,otos);return q?{lines:q.lines.map(l=>[l.label,l.amount]),total:q.total}:null}
+const plusOf=s=>(SNAP_PLUS&&SNAP_PLUS[s.id])||(P()&&P().stagePlus&&P().stagePlus(s.id))||s.plus;
 const stageFrom=id=>{if(SNAP_PRICES)return SNAP_PRICES[id]||{vk:0,gkv:0};return(P()&&P().stageFrom(id))||{vk:0,gkv:0}};
 
 const empty=()=>({kunde:{anrede:"",vorname:"",nachname:"",geb:"",tel:"",mail:"",kasse:"gkv",kk:"",verordnung:"",vdatum:"",hno:"",versorgung:"erst"},
@@ -356,7 +357,7 @@ function stepZiele(){
 function treppe(si,recIdx,pick){
  const gkv=S.kunde.kasse==="gkv";
  return `<div class="treppe${pick?" pick":""}">${STAGES.map((s,i)=>{const f=stageFrom(s.id),on=i===si,tag=pick?"button":"div";
-  const plus=i===0&&gkv?[...s.plus,"Zuzahlungsfrei"]:s.plus;
+  const plus=i===0&&gkv?[...plusOf(s),"Zuzahlungsfrei"]:plusOf(s);
   return `<${tag} ${pick?`type="button" data-stage="${i}" aria-pressed="${on}"`:""} class="tstep${on?" on":""}" style="--h:${370+i*34}px">
    <span class="ttop"><span class="tnum">${i+1}</span>${i===recIdx?'<span class="ttag">Empfehlung</span>':""}</span>
    <b>${s.name}</b><small>${esc(s.sub)}</small><i></i><em>${i===0?"Das ist dabei":"Neu"}</em>
@@ -516,7 +517,7 @@ async function sendLab(){
 }
 
 /* ---------- Kundenfenster ---------- */
-function pushCustomer(){if(!bc||KUNDE)return;const prices={};STAGES.forEach(s=>prices[s.id]=stageFrom(s.id));bc.postMessage({type:"state",S,custTab,prices,stage:curStage()})}
+function pushCustomer(){if(!bc||KUNDE)return;const prices={};STAGES.forEach(s=>prices[s.id]=stageFrom(s.id));const plus={};STAGES.forEach(s=>plus[s.id]=plusOf(s));bc.postMessage({type:"state",S,custTab,prices,plus,stage:curStage()})}
 function openCustomerWindow(){
  const url=location.href.split("#")[0]+"#kunde";
  custWin=window.open(url,"hd-kunde","popup=yes,width=1280,height=820");
@@ -665,15 +666,15 @@ p{margin:0;font-size:11pt;line-height:1.55}
 .price .tot td{border:0;padding-top:4mm;font-size:13pt;font-weight:700;color:#1B493B}.price .tot td:last-child{font-size:18pt}
 .fine{font-size:8.5pt;color:#7A918A;line-height:1.45}
 /* Stufen */
-.stages{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm}
-.stg{border:.4mm solid #DCE6E2;border-radius:5mm;padding:5mm;display:flex;flex-direction:column;gap:1.6mm;position:relative}
+.stages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3.5mm}
+.stg{border:.4mm solid #DCE6E2;border-radius:5mm;padding:4mm;display:flex;flex-direction:column;gap:1.4mm;position:relative}
 .stg .sp{list-style:none;margin:1mm 0;padding:0;display:flex;flex-direction:column;gap:.8mm;font-size:9pt}.stg .sp li{padding-left:3.5mm;position:relative}.stg .sp li:before{content:"+";position:absolute;left:0;font-weight:700;color:#276955}
 .stg.on{border:.8mm solid #276955;background:#F3F8F6}
-.stg .tag{position:absolute;top:4mm;right:4mm;background:#276955;color:#fff;font-size:8pt;font-weight:700;border-radius:99px;padding:1mm 3mm}
+.stg .tag{position:absolute;top:4mm;right:3.5mm;background:#276955;color:#fff;font-size:8pt;font-weight:700;border-radius:99px;padding:1mm 3mm}
 .stg .num{width:8mm;height:8mm;border-radius:50%;background:#1B493B;color:#fff;display:grid;place-items:center;font-size:9pt;font-weight:700}
-.stg b{font-size:13pt}.stg em{font-style:normal;font-size:9.5pt;color:#587168}
-.stg .rows{display:grid;grid-template-columns:auto 1fr;gap:1mm 4mm;font-size:9pt;color:#3C5A50;align-items:center;margin:1mm 0}
-.stg .from{font-size:13pt;font-weight:700;color:#276955}.stg .from small{font-size:8.5pt;font-weight:400;color:#587168}
+.stg b{font-size:12.5pt}.stg em{font-style:normal;font-size:9.5pt;color:#587168}
+.stg .rows{display:grid;grid-template-columns:auto 1fr;gap:1mm 3mm;font-size:8.5pt;color:#3C5A50;align-items:center;margin:1mm 0}
+.stg .from{margin-top:auto;font-size:12pt;font-weight:700;color:#276955}.stg .from small{font-size:8.5pt;font-weight:400;color:#587168}
 /* Technologien */
 .tech{display:grid;grid-template-columns:1fr 1fr;gap:4mm 7mm}
 .tech div{border-top:.6mm solid #B7C6C2;padding-top:3mm}.tech b{display:block;font-size:11pt;margin-bottom:1mm}.tech p{font-size:9.8pt;line-height:1.5;color:#3C5A50}
@@ -750,9 +751,9 @@ footer img{height:7mm}
  <span class="kick">06 · Die sechs Technikstufen</span><h2>Für jeden Anspruch die passende Technik</h2>
  <p style="font-size:10.5pt;color:#3C5A50">Jede Stufe kann alles der vorherigen – und mehr. Je höher die Stufe, desto besser unterstützen die Hörsysteme Sie in anspruchsvollen Situationen und desto mehr arbeiten sie automatisch für Sie.</p>
  <div class="stages">${STAGES.map((s,i)=>{const f=stageFrom(s.id);return `<div class="stg${i===si?" on":""}">${i===si?'<span class="tag">Unsere Empfehlung</span>':""}<span class="num">${i+1}</span><b>${s.name}</b><em>${esc(s.sub)}</em>
-  <div class="rows">${DIMS.map((d,j)=>`<span>${d}</span>${dotsB(s.p[j],"#276955")}`).join("")}<span>Automatik</span><span>${esc(s.auto)}</span></div>
-  <ul class="sp">${(i===0&&gkv?[...s.plus,"Zuzahlungsfrei"]:s.plus).map(t=>`<li>${esc(t)}</li>`).join("")}</ul>
-  <em>Ideal für ${esc(s.ideal)}</em><span class="from">${s.id==="basis"?"Kassenleistung":"ab "+eur(gkv?f.gkv:f.vk)} <small>${s.id==="basis"?(gkv?"zuzahlungsfrei":"je Hörsystem"):gkv?"Eigenanteil je Hörsystem":"je Hörsystem"}</small></span></div>`}).join("")}</div>
+  <div class="rows">${DIMS.map((d,j)=>`<span>${d}</span>${dotsB(s.p[j],"#276955")}`).join("")}</div>
+  <ul class="sp">${(i===0&&gkv?[...plusOf(s),"Zuzahlungsfrei"]:plusOf(s)).map(t=>`<li>${esc(t)}</li>`).join("")}</ul>
+  ${STAGES.some(x=>plusOf(x).length>3||plusOf(x).join("").length>110)?"":`<em>Ideal für ${esc(s.ideal)}</em>`}<span class="from">${s.id==="basis"?"Kassenleistung":"ab "+eur(gkv?f.gkv:f.vk)} <small>${s.id==="basis"?(gkv?"zuzahlungsfrei":"je Hörsystem"):gkv?"Eigenanteil je Hörsystem":"je Hörsystem"}</small></span></div>`}).join("")}</div>
  ${foot(7)}</div></section>
 
 <section class="page"><div class="in">
@@ -848,10 +849,10 @@ function renderKunde(){document.getElementById("kroot").innerHTML=`<div class="b
 if(KUNDE){
  document.title="Hörakustik Daugsch · Ihre Hörberatung";
  document.body.innerHTML='<div id="kroot"><div class="bx"><div class="cust"><header><img class="clogo" src="img/logo.png" alt="Hörakustik Daugsch"></header><main><div class="crec"><div><h2>Herzlich willkommen</h2><p class="muted">natürlich · individuell · hören</p></div></div></main></div></div></div>';
- if(bc)bc.onmessage=ev=>{const m=ev.data;if(m&&m.type==="state"){S=m.S;custTab=m.custTab;SNAP_PRICES=m.prices;S.override=m.stage===recommend().idx?"":m.stage;renderKunde()}};
+ if(bc)bc.onmessage=ev=>{const m=ev.data;if(m&&m.type==="state"){S=m.S;custTab=m.custTab;SNAP_PRICES=m.prices;SNAP_PLUS=m.plus||null;S.override=m.stage===recommend().idx?"":m.stage;renderKunde()}};
 }
 
-window.HD_BERATUNG={render,set:(p,v)=>{set(p,v);changed();rr()},startWith:name=>{H().go("beratung");newConsultation();const n=String(name||"").replace(/,.*$/,"").trim();if(n){AK.q=n;akSearch(n);H().rerender()}}};
+window.HD_BERATUNG={defaultPlus:id=>(STAGES.find(s=>s.id===id)||{}).plus||[],render,set:(p,v)=>{set(p,v);changed();rr()},startWith:name=>{H().go("beratung");newConsultation();const n=String(name||"").replace(/,.*$/,"").trim();if(n){AK.q=n;akSearch(n);H().rerender()}}};
 })();
 /* Abschluss: geplante Termine automatisch auffrischen (beim Zurückkehren in die App und alle 2 Minuten) */
 (function(){const fresh=()=>{if(mode==="edit"&&step===8&&S.kunde&&S.kunde.akuwinId&&!AK.upLoading&&document.visibilityState==="visible"&&active()){AK.busy=null;akUpcoming(true)}};

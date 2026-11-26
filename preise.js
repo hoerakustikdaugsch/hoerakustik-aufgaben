@@ -9,7 +9,7 @@ const STAGES=[
  {id:"exzellenz",name:"Exzellenz",sub:"Souverän hören, auch wenn es lebhaft wird"},
  {id:"perfektion",name:"Perfektion",sub:"Höchste Technik für höchste Ansprüche"}];
 const FORMS=["RIC (Ex-Hörer)","HdO","HdO mit Schlauch","IdO","CIC / IIC"];
-const st={bands:[],extras:[],devices:[],gkv:690,sub:"geraete",q:"",stage:"",loaded:false,missing:false,
+const st={bands:[],extras:[],devices:[],gkv:690,plus:{},sub:"geraete",q:"",stage:"",loaded:false,missing:false,
  calc:{device:"",ins:"gkv",count:2,otos:0},editing:null,chan:null};
 const H=()=>window.HD;
 const eur=n=>(Math.round(n*100)/100).toLocaleString("de-DE",{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2})+" €";
@@ -42,6 +42,7 @@ async function load(){
  if(b.error||e.error||d.error){st.missing=true;st.loaded=true;st.loading=false;H().rerender();return}
  st.missing=false;st.bands=b.data;st.extras=e.data;st.devices=d.data;
  const g=(s.data||[]).find(x=>x.key==="gkv_share_per_side");if(g)st.gkv=Number(g.value);
+ const pl=(s.data||[]).find(x=>x.key==="stage_plus");st.plus=pl&&pl.value&&typeof pl.value==="object"?pl.value:{};
  st.loaded=true;st.loading=false;H().rerender();
  if(!st.chan){st.chan=sb.channel("hd-preise");["price_bands","extras","devices","settings"].forEach(t=>st.chan.on("postgres_changes",{event:"*",schema:"public",table:t},()=>{clearTimeout(st.rt);st.rt=setTimeout(load,300)}));st.chan.subscribe()}
 }
@@ -113,14 +114,29 @@ function extrasTab(){
   <td><select data-p-extra="${esc(x.id)}" data-f="billing"><option value="side" ${x.billing==="side"?"selected":""}>je Seite</option><option value="fitting" ${x.billing==="fitting"?"selected":""}>1× je Versorgung</option></select></td>
   <td><input data-p-extra="${esc(x.id)}" data-f="note" value="${esc(x.note||"")}"></td></tr>`).join("")}</tbody></table></div>`;
 }
+/* ---------- Mehrwert je Technikstufe (für Leistungstreppe & Broschüre) ---------- */
+const defPlus=id=>{const B=window.HD_BERATUNG;return B&&B.defaultPlus?B.defaultPlus(id):[]};
+const curPlus=id=>Array.isArray(st.plus[id])&&st.plus[id].length?st.plus[id]:defPlus(id);
+function nutzenTab(){
+ return `<div class="hint">Diese Punkte erscheinen in der Beratung in der Leistungstreppe, in der Kundenansicht und in der Broschüre. Pro Stufe nur das eintragen, was <b>neu dazukommt</b> – die Treppe zeigt, dass höhere Stufen alles der vorherigen enthalten. Kurz halten: 2–4 Punkte, je Punkt wenige Wörter.</div>
+ <div class="nutzen">${STAGES.map((s,i)=>{const own=Array.isArray(st.plus[s.id])&&st.plus[s.id].length,list=curPlus(s.id);
+  return `<section class="ncard"><header><span class="pnum">${String(i+1).padStart(2,"0")}</span><div><b>${s.name}</b><small>${esc(s.sub)}</small></div>${own?`<button type="button" class="linkbtn" data-n-reset="${s.id}">Auf Standard zurück</button>`:'<span class="tag">Standardtexte</span>'}</header>
+   <div class="nlist">${list.map((t,j)=>`<div class="nrow"><span aria-hidden="true">+</span><input data-n-stage="${s.id}" data-n-i="${j}" value="${esc(t)}" maxlength="60" aria-label="${esc(s.name)} Punkt ${j+1}"><button type="button" class="nx" data-n-del="${s.id}" data-n-i="${j}" aria-label="Punkt löschen">×</button></div>`).join("")}</div>
+   ${list.length<5?`<button type="button" class="btn light" data-n-add="${s.id}">${svg("plus")}Punkt hinzufügen</button>`:""}</section>`}).join("")}</div>
+ <p class="muted" style="margin-top:12px">Bei Basis wird für Kassenpatienten automatisch „Zuzahlungsfrei“ ergänzt.</p>`;
+}
+async function savePlus(id,list){
+ st.plus={...st.plus,[id]:list};
+ await up("settings",{key:"stage_plus",value:st.plus},"Mehrwert gespeichert");H().rerender();
+}
 function render(){
  if(!st.loaded&&!st.loading&&H().sb)setTimeout(load,0);
  if(!st.loaded)return `<div class="empty"><p>Preise werden geladen …</p></div>`;
  if(st.missing)return `<div class="bar"><h2>Preise</h2></div><div class="empty"><p><b>Die Preis-Tabellen sind noch nicht eingerichtet.</b><br>Bitte das Skript <code>sql/002_preise.sql</code> einmal im Supabase SQL-Editor ausführen, dann diese Seite neu laden.</p></div>`;
  const tab=(id,l)=>`<button data-p-sub="${id}" aria-pressed="${st.sub===id}">${l}</button>`;
- return `<div class="bar"><h2>Preise</h2><div class="tabs" role="group" aria-label="Bereich">${tab("geraete","Geräte")}${tab("stufen","Preiskategorien")}${tab("extras","Zusatzpositionen")}</div>
-  <button class="btn primary" data-p-new style="margin-left:auto">${svg("plus")}Gerät anlegen</button></div>`+
-  stageStrip()+(st.sub==="stufen"?bandsTab():st.sub==="extras"?extrasTab():devicesTab());
+ return `<div class="bar"><h2>Preise</h2><div class="tabs" role="group" aria-label="Bereich">${tab("geraete","Geräte")}${tab("stufen","Preiskategorien")}${tab("extras","Zusatzpositionen")}${tab("nutzen","Mehrwert je Stufe")}</div>
+  ${st.sub==="nutzen"?"":`<button class="btn primary" data-p-new style="margin-left:auto">${svg("plus")}Gerät anlegen</button>`}</div>`+
+  (st.sub==="nutzen"?nutzenTab():stageStrip()+(st.sub==="stufen"?bandsTab():st.sub==="extras"?extrasTab():devicesTab()));
 }
 
 /* ---------- Geräte-Dialog ---------- */
@@ -177,6 +193,9 @@ document.addEventListener("click",e=>{
  const s=el.closest("[data-p-sub]");if(s){st.sub=s.dataset.pSub;H().rerender();return}
  const g=el.closest("[data-p-stage]");if(g){st.stage=st.stage===g.dataset.pStage?"":g.dataset.pStage;st.sub="geraete";H().rerender();return}
  if(el.closest("[data-p-new]")){openDevice();return}
+ const na=el.closest("[data-n-add]");if(na){const id=na.dataset.nAdd;st.plus={...st.plus,[id]:[...curPlus(id),""]};H().rerender();setTimeout(()=>{const ins=document.querySelectorAll(`[data-n-stage="${id}"]`);ins[ins.length-1]?.focus()},30);return}
+ const nd=el.closest("[data-n-del]");if(nd){const id=nd.dataset.nDel,l=[...curPlus(id)];l.splice(Number(nd.dataset.nI),1);savePlus(id,l.filter(Boolean).length?l.filter(Boolean):[]);return}
+ const nr=el.closest("[data-n-reset]");if(nr){H().ask("Standard wiederherstellen?",`Die eigenen Punkte für ${STAGES.find(s=>s.id===nr.dataset.nReset).name} werden durch die Standardtexte ersetzt.`,()=>savePlus(nr.dataset.nReset,[]));return}
  const c=el.closest("[data-p-calc]");if(c){const k=c.dataset.pCalc;st.calc[k]=k==="ins"?c.dataset.v:Number(c.dataset.v);H().rerender();return}
  const d=el.closest("[data-p-dev]");if(d){const dev=st.devices.find(x=>x.id===d.dataset.pDev);if(dev){st.calc.device=dev.id;openDevice(dev)}}
 });
@@ -184,6 +203,7 @@ document.addEventListener("input",e=>{if(e.target.id==="p_q"){st.q=e.target.valu
 document.addEventListener("change",async e=>{
  const t=e.target;if(!H()||H().page()!=="preise")return;
  if(t.id==="p_calcdev"){st.calc.device=t.value;H().rerender();return}
+ if(t.dataset.nStage){const id=t.dataset.nStage,l=[...curPlus(id)];l[Number(t.dataset.nI)]=t.value.trim();await savePlus(id,l.filter(Boolean));return}
  if(t.dataset.pGkv!==undefined){const v=num(t.value);if(v==null)return H().toast("Bitte eine Zahl eingeben");st.gkv=v;await up("settings",{key:"gkv_share_per_side",value:v},"Kassenanteil gespeichert");H().rerender();return}
  const isB=t.dataset.pBand,isX=t.dataset.pExtra;if(!isB&&!isX)return;
  const f=t.dataset.f,list=isB?st.bands:st.extras,row=list.find(x=>x.id===(isB||isX));if(!row)return;
@@ -191,5 +211,5 @@ document.addEventListener("change",async e=>{
  row[f]=v;await up(isB?"price_bands":"extras",{...row},"Gespeichert");H().rerender();
 });
 
-window.HD_PREISE={render,load,quote,bandFor,stageFrom,STAGES,state:st,count:()=>st.devices.filter(d=>d.active).length};
+window.HD_PREISE={render,load,quote,bandFor,stageFrom,STAGES,state:st,stagePlus:id=>Array.isArray(st.plus[id])&&st.plus[id].length?st.plus[id]:null,count:()=>st.devices.filter(d=>d.active).length};
 })();
