@@ -1,7 +1,7 @@
 /* Hörakustik Daugsch · Portal – Start & Aufgaben
    Daten: Supabase (Postgres + Live-Sync). */
 (() => {
-const VERSION="1.16.0 · Cockpit-Startseite und Beratungs-Zusammenfassung";
+const VERSION="1.17.0 · Termin erstellen im Kalender";
 const CATS=[["Kunden",["Rückruf","Anpassung","Reservierung"]],["Werkstatt",["Aufarbeitung","Reparatur","Otoplastik"]],["Einkauf & Lager",["Bestellung","Zubehör","Lagerausbuchung","Rücksendung Hersteller"]],["Verwaltung",["Krankenkasse","Buchhaltung","Marketing","Sonstiges"]]];
 const GROUP_OF={};CATS.forEach(([g,cs])=>cs.forEach(c=>GROUP_OF[c]=g));
 const TILE={"Kunden":"t-kunden","Werkstatt":"t-werkstatt","Einkauf & Lager":"t-lager","Verwaltung":"t-verwaltung"};
@@ -171,7 +171,7 @@ function startPage(){
  const K=window.HD_KALENDER?window.HD_KALENDER.cockpitHtml():{n:0,html:""},kk=typeof K==="string"?{n:"",html:K}:K;
  const L=window.HD_LABOR,lopen=L?L.openCount():0;
  const col=(id,ic,cls,title,count,body,link,linkTxt)=>`<section class="ckcol${ckTab===id?" show":""}" aria-label="${title}">
-   <header><span class="ckic ${cls}">${svg(ic)}</span><h2>${title}</h2><span class="ckcount">${count}</span></header>${body}
+   <header><span class="ckic ${cls}">${svg(ic)}</span><h2>${title}</h2><span class="ckcount">${count}</span>${id==="termine"&&window.HD_KALENDER&&window.HD_KALENDER.openNew?`<button type="button" class="ckadd" data-knew aria-label="Termin erstellen" title="Termin erstellen">${svg("plus")}</button>`:""}</header>${body}
    <button type="button" class="cklink" data-go="${link}">${linkTxt} ${svg("arrow")}</button></section>`;
  return `<div class="ckhead"><div><span class="date">${now.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})}</span><h1>${esc(greeting())}${who?", "+esc(who):""}</h1></div>
   <div class="ckquick"><button type="button" class="btn primary" data-ck-task>${svg("plus")}Aufgabe</button><button type="button" class="btn light" data-ck-bnew>${svg("chat")}Beratung starten</button><button type="button" class="btn light" data-ck-labnew>${svg("flask")}Laborauftrag</button></div></div>
